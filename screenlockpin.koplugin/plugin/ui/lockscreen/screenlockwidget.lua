@@ -18,7 +18,7 @@ local ScreenLockWidget = VerticalGroup:extend {
 
     scale = 0.5, -- 0 (minimum) to 1 (maximum)
     max_width_factor = 0.9,
-    min_item_width = Size.item.height_large * 2.5,
+    min_item_width = Size.item.height_large * 1.75,
     min_item_height = Size.item.height_large,
 }
 
@@ -26,7 +26,7 @@ function ScreenLockWidget:init()
     local scaling = self:scaling(Screen:getWidth())
     self.state = PinInputState:new {
         placeholder = _("Enter PIN"),
-        size_factor = 1 + self.scale,
+        size_factor = 0.85 + 1.15 * self.scale,
         font_size = scaling.font_size,
         on_display_update = self.on_display_update,
         on_display_update = function(text) if self[1] then self[1]:setText(text) end end,
@@ -51,12 +51,12 @@ end
 function ScreenLockWidget:scaling(full_width)
     local scale = math.max(0, math.min(1, self.scale))
     local max_item_width = math.floor(full_width / COLS * self.max_width_factor)
-    local item_with = self.min_item_width + (max_item_width - self.min_item_width) * scale
+    local item_width = self.min_item_width + (max_item_width - self.min_item_width) * scale
     return {
-        width = math.max(self.min_item_width * COLS, math.min(full_width, item_with * COLS)),
-        font_size = 16 + scale * 10,
-        display_font_size = 14 + scale * 8,
-        display_box_padding = (Size.padding.large * 2.5) * scale,
+        width = math.max(self.min_item_width * COLS, math.min(full_width, item_width * COLS)),
+        font_size = math.floor(14 + scale * 12),
+        display_font_size = math.floor(14 + scale * 10),
+        display_box_padding = math.floor((Size.padding.large * 2) * scale),
     }
 end
 
