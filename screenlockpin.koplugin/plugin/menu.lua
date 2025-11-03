@@ -19,7 +19,7 @@ return {
             separator = true,
         },
         {
-            text = _("Lock screen panel options"),
+            text = _("Lock screen options"),
             callback = settingsCtrl.showUiSettingsDialog,
             separator = true,
         },
