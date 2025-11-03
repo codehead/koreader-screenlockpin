@@ -3,7 +3,17 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-[//]: # (## [Unreleased])
+## [Unreleased]
+
+### Changed
+
+- The lock screen panel size factor is slightly changed, to allow for even
+  smaller panels.
+
+### Added
+
+- [#5](https://github.com/oleasteo/koreader-screenlockpin/issues/5)
+  The lock screen panel position is configurable.
 
 ## [2025.10-3] - 2025-10-29
 
