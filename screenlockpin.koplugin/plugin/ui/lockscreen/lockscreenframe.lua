@@ -28,7 +28,7 @@ function LockScreenFrame:init()
     local uiSettings = pluginSettings.getUiSettings()
     self.lock_widget = ScreenLockWidget:new {
         ui_root = self,
-        scale = uiSettings.scale,
+        scale = uiSettings.scale / 100,
         on_update = function(input)
             if input ~= pluginSettings.readPin() then
                 self.lock_widget.state:incFailedCount()
@@ -62,9 +62,19 @@ end
 function LockScreenFrame:getRefreshRegion()
     if self._refresh_region then return self._refresh_region end
     local content_size = self[1]:getSize()
+    local uiSettings = pluginSettings.getUiSettings()
+    local pos_x = uiSettings.pos_x / 100
+    local pos_y = uiSettings.pos_y / 100
+    if pos_x < 0 then pos_x = 0 elseif pos_x > 1 then pos_x = 1 end
+    if pos_y < 0 then pos_y = 0 elseif pos_y > 1 then pos_y = 1 end
+    local avail_w = math.max(0, Screen:getWidth() - content_size.w)
+    local avail_h = math.max(0, Screen:getHeight() - content_size.h)
+    local x = math.floor(avail_w * pos_x)
+    local y = math.floor(avail_h * pos_y)
+
     self._content_region = Geom:new {
-        x = math.floor((Screen:getWidth() - content_size.w)/2),
-        y = math.floor((Screen:getHeight() - content_size.h)/2),
+        x = x,
+        y = y,
         w = content_size.w,
         h = content_size.h,
     }

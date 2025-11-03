@@ -35,10 +35,10 @@ end
 
 local function showUiSettingsDialog()
     uiSettingsDialog = UiSettingsDialog:new {
-        on_save = function()
+        close_callback = function()
             UIManager:close(uiSettingsDialog, "ui")
             uiSettingsDialog = nil
-        end
+        end,
     }
     UIManager:show(uiSettingsDialog)
 end
