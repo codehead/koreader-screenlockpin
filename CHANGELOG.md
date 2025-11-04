@@ -8,11 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [2025.11] - 2025-11-04
 
 The lock screen becomes even more customizable. With the new panel position
-controls, I personally put it in small to the right edge near the bottom, so I
-can unlock single-handedly. Feels so easy now 🪶
+controls, it can be put to the side for single-handed unlocking. I, myself, put
+it on the right edge close to the bottom with a small size.
+Feels way easier now ✨
 
-Also, as I'm gonna travel soon, I had to add customizable notes to the lock
-screen, just in case the device is lost (and found by some honest person) 🤞😅
+Also, as I'm going to travel soon, I just had to add customizable notes to the
+lock screen. A tiny insurance for when the device might get lost 🤞
 
 Have fun!
 
