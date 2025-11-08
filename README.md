@@ -68,6 +68,7 @@ issues you encounter.
 Tested devices:
 - ✅ Kindle Oasis (10th generation)
 - ✅ Kobo Aura (N514)
+- ✅ Kindle 10th Generation
 
 If you tested this plugin on another device type, please add it to the list
 above.
