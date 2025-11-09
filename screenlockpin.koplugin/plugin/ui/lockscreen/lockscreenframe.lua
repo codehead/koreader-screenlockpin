@@ -7,15 +7,65 @@ local Geom = require("ui/geometry")
 local UIManager = require("ui/uimanager")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
+local InputContainer = require("ui/widget/container/inputcontainer")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
 local IconButton = require("ui/widget/iconbutton")
+local GestureRange = require("ui/gesturerange")
 local Screen = Device.screen
 
 local pluginSettings = require("plugin/settings")
 local ScreenLockWidget = require("plugin/ui/lockscreen/screenlockwidget")
 
-local LockScreenFrame = WidgetContainer:extend {
+-- Transparent input widget for handling taps outside the panel
+local OutsideAreaInput = InputContainer:extend {
+    name = "SLPOutsideArea",
+    content_region = nil,
+}
+
+function OutsideAreaInput:init()
+    if Device:isTouchDevice() then
+        self.ges_events.TapOutside = {
+            GestureRange:new{ ges = "tap", range = Screen:getSize() }
+        }
+    end
+    self.screen_mid = Screen:getHeight() / 2
+    if Device:hasFrontlight() then
+        self.brightness_step = math.floor(Device.powerd.fl_max / 5 + 0.5)
+    end
+end
+
+function OutsideAreaInput:onTapOutside(_, ges)
+    if not ges or not ges.pos or not self.content_region then
+        return false  -- Let event propagate to keypad
+    end
+    
+    local tap_pos = ges.pos
+    local cr = self.content_region
+    
+    if tap_pos.x < cr.x or tap_pos.x > cr.x + cr.w or
+       tap_pos.y < cr.y or tap_pos.y > cr.y + cr.h then
+        
+        -- Adjust frontlight brightness based on tap position
+        if self.brightness_step then
+            local brightness = Device.powerd:frontlightIntensity()
+            local new_brightness
+            
+            if tap_pos.y < self.screen_mid then
+                new_brightness = math.min(Device.powerd.fl_max, brightness + self.brightness_step)
+            else
+                new_brightness = math.max(Device.powerd.fl_min, brightness - self.brightness_step)
+            end
+            
+            Device.powerd:setIntensity(new_brightness)
+        end
+        return true  -- Consume event
+    end
+    
+    return false  -- Let event propagate to keypad
+end
+
+local LockScreenFrame = InputContainer:extend(WidgetContainer:extend {
     name = "SLPLockScreen",
 
     lock_widget = nil,
@@ -28,7 +78,9 @@ local LockScreenFrame = WidgetContainer:extend {
 
     _refresh_region = nil,
     _content_region = nil,
-}
+    outside_input = nil,
+    panel = nil,
+})
 
 function LockScreenFrame:init()
     local uiSettings = pluginSettings.getUiSettings()
@@ -59,7 +111,11 @@ function LockScreenFrame:init()
         }
     end
 
-    self[1] = FrameContainer:new {
+    self.outside_input = OutsideAreaInput:new {
+        content_region = nil,
+    }
+    self[1] = self.outside_input
+    self.panel = FrameContainer:new {
         background = Blitbuffer.COLOR_WHITE,
         -- half-bright gray border plays nice with most wallpapers and mitigates
         -- ghosting a little
@@ -71,6 +127,7 @@ function LockScreenFrame:init()
             self.action_row,
         }
     }
+    self[2] = self.panel
 end
 
 function LockScreenFrame:setVisible(bool)
@@ -80,12 +137,12 @@ end
 function LockScreenFrame:paintTo(bb, x, y)
     if not self.visible then return end
     local region = self:getContentRegion()
-    self[1]:paintTo(bb, x + region.x, y + region.y)
+    self.panel:paintTo(bb, x + region.x, y + region.y)
 end
 
 function LockScreenFrame:getRefreshRegion()
     if self._refresh_region then return self._refresh_region end
-    local content_size = self[1]:getSize()
+    local content_size = self.panel:getSize()
     local uiSettings = pluginSettings.getUiSettings()
     local pos_x = uiSettings.pos_x / 100
     local pos_y = uiSettings.pos_y / 100
@@ -102,6 +159,7 @@ function LockScreenFrame:getRefreshRegion()
         w = content_size.w,
         h = content_size.h,
     }
+    self.outside_input.content_region = self._content_region
     self._refresh_region = Geom:new {
         x = math.max(0, self._content_region.x - self.clear_outset),
         y = math.max(0, self._content_region.y - self.clear_outset),
@@ -124,8 +182,9 @@ end
 function LockScreenFrame:relayout(refreshmode)
     local screen_dimen = Geom:new{x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight()}
     logger.dbg("ScreenLockPin: resize overlay to " .. screen_dimen.x .. "x" .. screen_dimen.y)
-    self[1].dimen = screen_dimen
+    self.panel.dimen = screen_dimen
     self.lock_widget:onScreenResize(screen_dimen)
+    self.outside_input.screen_mid = screen_dimen.h / 2
     self._refresh_region = nil
     self._content_region = nil
     UIManager:setDirty(self, refreshmode, self:getRefreshRegion())
