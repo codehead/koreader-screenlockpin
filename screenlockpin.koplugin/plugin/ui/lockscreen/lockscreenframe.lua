@@ -78,6 +78,8 @@ local LockScreenFrame = InputContainer:extend(WidgetContainer:extend {
 
     _refresh_region = nil,
     _content_region = nil,
+    outside_input = nil,
+    panel = nil,
 })
 
 function LockScreenFrame:init()
@@ -125,6 +127,7 @@ function LockScreenFrame:init()
             self.action_row,
         }
     }
+    self[2] = self.panel
 end
 
 function LockScreenFrame:setVisible(bool)
