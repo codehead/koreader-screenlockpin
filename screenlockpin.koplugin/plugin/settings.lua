@@ -119,6 +119,26 @@ local function setPin(next_pin)
 end
 
 --
+-- Persistent cache
+--
+
+local function readPersistentCache(key)
+    local cache = G_reader_settings:readSetting("screenlockpin_cache") or {}
+    if not key then return cache end
+    return cache[key]
+end
+
+local function writePersistentCache(data)
+    G_reader_settings:saveSetting("screenlockpin_cache", data)
+end
+
+local function putPersistentCache(key, data)
+    local cache = readPersistentCache()
+    cache[key] = data
+    writePersistentCache(cache)
+end
+
+--
 -- Lock on wakeup
 --
 
@@ -199,6 +219,9 @@ return {
 
     readPin = readPin,
     setPin = setPin,
+
+    readPersistentCache = readPersistentCache,
+    putPersistentCache = putPersistentCache,
 
     shouldLockOnBoot = shouldLockOnBoot,
     shouldLockOnWakeup = shouldLockOnWakeup,

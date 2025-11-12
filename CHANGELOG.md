@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - [#11](https://github.com/oleasteo/koreader-screenlockpin/issues/11)
   Taps on the off-panel area increase (top) or decrease (bottom) the frontlight
   brightness. Contributor: [HadyBazzi](https://github.com/HadyBazzi)
+- [#12](https://github.com/oleasteo/koreader-screenlockpin/issues/12)
+  A notification is shown after unlock, if PIN attempts failed too many times
+  (throttled at least twice) since locked.
 
 ## [2025.11] - 2025-11-04
 
