@@ -5,6 +5,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 [//]: # (## [Unreleased])
 
+### Added
+
+- [#11](https://github.com/oleasteo/koreader-screenlockpin/issues/11)
+  Taps on the off-panel area increase (top) or decrease (bottom) the frontlight
+  brightness. Contributor: [HadyBazzi](https://github.com/HadyBazzi)
+
 ## [2025.11] - 2025-11-04
 
 The lock screen becomes even more customizable. With the new panel position

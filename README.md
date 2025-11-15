@@ -26,6 +26,7 @@ and more…
 - 🪄 **Instant unlock** — immediate response, no extra confirmation button
 - 🪧 **Contact notes** — people should know how to return a lost device
 - 🎯 **Customizable layout** — can be configured for single-handed use
+- 🔆 **Frontlight control** — easily turn on the screen light in a dark environment
 - 🪃 **Lightweight design** — optimized for performance
 - 🗽 **PIN length** — 3 to 12 digits
 
