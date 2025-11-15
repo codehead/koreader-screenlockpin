@@ -53,6 +53,9 @@ local function mergeDefaultSettings()
     if G_reader_settings:hasNot("screenlockpin_note_text") then
         G_reader_settings:saveSetting("screenlockpin_note_text", "")
     end
+    if G_reader_settings:hasNot("screenlockpin_prevent_screenshots") then
+        G_reader_settings:saveSetting("screenlockpin_prevent_screenshots", true)
+    end
 end
 
 local function init()
@@ -102,6 +105,18 @@ end
 
 local function setNoteText(text)
     G_reader_settings:saveSetting("screenlockpin_note_text", text)
+end
+
+--
+-- Prevent screenshots
+--
+
+local function getPreventScreenshots()
+    return G_reader_settings:readSetting("screenlockpin_prevent_screenshots")
+end
+
+local function setPreventScreenshots(bool)
+    G_reader_settings:saveSetting("screenlockpin_prevent_screenshots", bool)
 end
 
 --
@@ -216,6 +231,9 @@ return {
     getNoteSettings = getNoteSettings,
     setNoteMode = setNoteMode,
     setNoteText = setNoteText,
+
+    getPreventScreenshots = getPreventScreenshots,
+    setPreventScreenshots = setPreventScreenshots,
 
     readPin = readPin,
     setPin = setPin,

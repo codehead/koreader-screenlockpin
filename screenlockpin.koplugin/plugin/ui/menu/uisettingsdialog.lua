@@ -87,6 +87,19 @@ local UiSettingsDialog = ConfigDialog:extend {
                     event = "EditNoteText",
                 },
             },
+        },
+        {
+            icon = "triangle",
+            options = {
+                {
+                    name = "screenshots_mode",
+                    name_text = _("Screenshots"),
+                    toggle = { C_("Lock screen screenshots", "prevent"), C_("Lock screen screenshots", "allow") },
+                    args = { "prevent", "allow" },
+                    values = { "prevent", "allow" },
+                    event = "SetScreenshotsMode",
+                },
+            },
         }
     },
 }
@@ -95,12 +108,14 @@ function UiSettingsDialog:init()
     self.ui = self
     local uiSettings = pluginSettings.getUiSettings()
     local noteSettings = pluginSettings.getNoteSettings()
+    local prevent_screenshots = pluginSettings.getPreventScreenshots()
     self.configurable = {
         ui_scale = uiSettings.scale,
         ui_pos_x = uiSettings.pos_x,
         ui_pos_y = 100 - uiSettings.pos_y,
         note_mode = noteSettings.mode,
         note_text = noteSettings.text,
+        screenshots_mode = prevent_screenshots and "prevent" or "allow",
     }
     ConfigDialog.init(self)
 end
@@ -167,6 +182,12 @@ function UiSettingsDialog:onEditNoteText()
     }
     UIManager:show(self._note_input_dialog)
     self._note_input_dialog:onShowKeyboard()
+    return true
+end
+
+function UiSettingsDialog:onSetScreenshotsMode(mode)
+    pluginSettings.setPreventScreenshots(mode == "prevent")
+    self.configurable.screenshots_mode = mode
     return true
 end
 

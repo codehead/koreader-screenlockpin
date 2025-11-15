@@ -123,7 +123,9 @@ local function showOrClearLockScreen(cause)
     if overlay then return reuseShowOverlay() end
     logger.dbg("ScreenLockPin: create lock screen")
     screensaverUtil.freezeScreensaverAbi()
-    screenshoterUtil.freezeScreenshoterAbi()
+    if pluginSettings.getPreventScreenshots() then
+        screenshoterUtil.freezeScreenshoterAbi()
+    end
     overlay = LockScreenFrame:new {
         -- UIManager performance tweaks
         modal = true,
