@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 [//]: # (## [Unreleased])
 
+### Changed
+
+- [#19](https://github.com/oleasteo/koreader-screenlockpin/issues/19)
+  Screenshots are blocked on the lock screen.
+
 ### Added
 
 - [#11](https://github.com/oleasteo/koreader-screenlockpin/issues/11)

@@ -10,6 +10,7 @@ local T = ffiutil.template
 
 local pluginSettings = require("plugin/settings")
 local screensaverUtil = require("plugin/util/screensaverutil")
+local screenshoterUtil = require("plugin/util/screenshoterutil")
 local NotesFrame = require("plugin/ui/lockscreen/notesframe")
 local LockScreenFrame = require("plugin/ui/lockscreen/lockscreenframe")
 
@@ -56,6 +57,7 @@ local function closeLockScreenDueToUnlock()
     logger.dbg("ScreenLockPin: close lock screen")
     screensaverUtil.unfreezeScreensaverAbi()
     screensaverUtil.totalCleanup()
+    screenshoterUtil.unfreezeScreenshoterAbi()
     UIManager:close(overlay, "full", overlay:getRefreshRegion())
     overlay = nil
     local throttled_times = pluginSettings.readPersistentCache("throttled_times") or 0
@@ -121,6 +123,7 @@ local function showOrClearLockScreen(cause)
     if overlay then return reuseShowOverlay() end
     logger.dbg("ScreenLockPin: create lock screen")
     screensaverUtil.freezeScreensaverAbi()
+    screenshoterUtil.freezeScreenshoterAbi()
     overlay = LockScreenFrame:new {
         -- UIManager performance tweaks
         modal = true,
