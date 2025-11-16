@@ -52,9 +52,9 @@ local function formatAttempts()
     return str
 end
 
-local function closeLockScreenDueToUnlock()
-    if not overlay then return end
-    logger.dbg("ScreenLockPin: close lock screen")
+local function unlockScreen(cause)
+    if not overlay then return false end
+    logger.dbg("ScreenLockPin: close lock screen (" .. cause .. ")")
     screensaverUtil.unfreezeScreensaverAbi()
     screensaverUtil.totalCleanup()
     screenshoterUtil.unfreezeScreenshoterAbi()
@@ -69,6 +69,7 @@ local function closeLockScreenDueToUnlock()
         pluginSettings.putPersistentCache("throttled_times", 0)
         pluginSettings.putPersistentCache("attempts_by_length", nil)
     end
+    return true
 end
 
 local function onSuspend()
@@ -140,7 +141,7 @@ local function showOrClearLockScreen(cause)
         -- UIManager hook (called on ui root elements)
         onResume = onResume,
         -- LockScreenFrame
-        on_unlock = closeLockScreenDueToUnlock,
+        on_unlock = function () unlockScreen("valid_pin") end,
         on_show_notes = showNotes,
     }
     UIManager:show(overlay, "full", overlay:getRefreshRegion())
@@ -148,4 +149,6 @@ end
 
 return {
     showOrClearLockScreen = showOrClearLockScreen,
+    unlockScreen = unlockScreen,
+    isActive = function () return overlay ~= nil end,
 }

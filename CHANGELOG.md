@@ -18,7 +18,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - [#12](https://github.com/oleasteo/koreader-screenlockpin/issues/12)
   A notification is shown after unlock, if PIN attempts failed too many times
   (throttled at least twice) since locked.
-- Menu toggle to disable the lock screen.
+- Menu toggle to disable the lock screen. Whilst not directly useful via UI,
+  this option can be useful as a main switch via dispatcher actions (see below).
+- Provide dispatcher actions to unlock or en/disable the lock screen.
+- Provide well-defined public API for 3rd party plugins (see
+  [plugin/publicapi.lua](screenlockpin.koplugin/plugin/publicapi.lua) for
+  details).
 
 ## [2025.11] - 2025-11-04
 

@@ -59,6 +59,43 @@ or during wakeup from sleep mode.
 If you enable *lock on boot*, make sure to have some way of file access without
 unlocking the KOReader, in case you forget the PIN (see FAQ below).
 
+Actions for the dispatcher (e.g., Gesture manager) can be found in the *Device*
+group.
+
+---
+
+## 🛠️ Public API
+
+We do expose an interface to use in foreign plugins. For example, a plugin could
+use this API to disable the lock screen based on external factors like date or
+time.
+
+The interface can be accessed like this:
+
+```lua
+local PluginShare = require("pluginshare")
+
+function yourFunction()
+   local lockScreen = PluginShare.screen_lock_pin
+   if not lockScreen then return end
+   -- safely use lockScreen here
+   -- e.g., lockScreen:lock()
+end
+```
+
+See [publicapi.lua](screenlockpin.koplugin/plugin/publicapi.lua) for available
+methods. Please create an issue or PR if we're missing something that would be
+of use to you.
+
+If you've built a plugin that integrates with the lock screen, kindly open a PR
+to list it here for others to find.
+
+<!--
+
+- ➡️ [MyPlugin](https://…) – Brief description.
+
+-->
+
 ---
 
 ## 🧩 Compatibility

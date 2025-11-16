@@ -30,9 +30,9 @@ local function unfreezeScreensaverAbi()
     end
 end
 
-local function showWhileAwake(event, message)
+local function showWhileAwake()
     if Screensaver.setup == noop then return end
-    Screensaver:setup(event, message)
+    Screensaver:setup("lockscreen_backdrop")
     Screensaver:show()
     -- Device has two properties that determine if a power key press emits
     -- `Suspend` or `Resume`: screen_saver_mode and screen_saver_lock.
