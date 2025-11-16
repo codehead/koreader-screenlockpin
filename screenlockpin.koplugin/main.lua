@@ -49,6 +49,7 @@ end
 
 -- KOReader plugin hook (on wakeup after suspend)
 function ScreenLockPinPlugin.onResume()
+    if not pluginSettings.getEnabled() then return end
     if not pluginSettings.shouldLockOnWakeup() then return end
     -- we hijacked the screensaver_delay (property of ui/screensaver.lua)
     -- any unknown values will be interpreted as "tap to exit from screensaver"
@@ -59,10 +60,13 @@ end
 
 -- Monkey-patched hook (registered via onBootHook)
 function ScreenLockPinPlugin.onBoot()
+    if not pluginSettings.getEnabled() then return end
     if not pluginSettings.shouldLockOnBoot() then return end
     logger.dbg("ScreenLockPin: lock on boot")
     screensaverUtil.showWhileAwake("lockonboot")
     lockscreenCtrl.showOrClearLockScreen("boot")
 end
+
+--
 
 return ScreenLockPinPlugin

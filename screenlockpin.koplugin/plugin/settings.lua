@@ -26,9 +26,16 @@ local function migrateSettings()
             G_reader_settings:saveSetting("screenlockpin_ui_scale", math.floor(uiScale * 100))
         end
     end
+    if G_reader_settings:hasNot("screenlockpin_onwakeup") then
+        local bool = G_reader_settings:readSetting("screensaver_delay") == "plugin:screenlockpin"
+        G_reader_settings:saveSetting("screenlockpin_onwakeup", bool)
+    end
 end
 
 local function mergeDefaultSettings()
+    if G_reader_settings:hasNot("screenlockpin_enabled") then
+        G_reader_settings:saveSetting("screenlockpin_enabled", true)
+    end
     if G_reader_settings:hasNot("screenlockpin_ui_scale") then
         G_reader_settings:saveSetting("screenlockpin_ui_scale", 40)
     end
@@ -43,6 +50,9 @@ local function mergeDefaultSettings()
     end
     if G_reader_settings:hasNot("screenlockpin_onboot") then
         G_reader_settings:makeFalse("screenlockpin_onboot")
+    end
+    if G_reader_settings:hasNot("screenlockpin_onwakeup") then
+        G_reader_settings:makeFalse("screenlockpin_onwakeup")
     end
     if G_reader_settings:hasNot("screenlockpin_ratelimit") then
         G_reader_settings:makeTrue("screenlockpin_ratelimit")
@@ -62,6 +72,34 @@ local function init()
     logger.dbg("ScreenLockPin: init settings")
     migrateSettings()
     mergeDefaultSettings()
+end
+
+--
+-- Enable / Disable Plugin
+--
+
+local function isEnabled()
+    return G_reader_settings:readSetting("screenlockpin_enabled")
+end
+
+local function enable()
+    if isEnabled() then return false end
+    G_reader_settings:saveSetting("screenlockpin_enabled", true)
+    if shouldLockOnWakeup() then stashOriginScreensaverDelay() end
+end
+
+local function disable()
+    if not isEnabled() then return false end
+    G_reader_settings:saveSetting("screenlockpin_enabled", false)
+    if isScreensaverDelay() then restoreOriginScreensaverDelay() end
+end
+
+local function setEnabled(bool)
+    if bool then return enable() else return disable() end
+end
+
+local function toggleEnabled()
+    setEnabled(not isEnabled())
 end
 
 --
@@ -157,28 +195,42 @@ end
 -- Lock on wakeup
 --
 
-local function shouldLockOnWakeup()
+function isScreensaverDelay()
     return G_reader_settings:readSetting("screensaver_delay") == "plugin:screenlockpin"
 end
 
+function shouldLockOnWakeup()
+    return G_reader_settings:readSetting("screenlockpin_onwakeup")
+end
+
+function stashOriginScreensaverDelay()
+    if isScreensaverDelay() then return end
+    local return_value = G_reader_settings:readSetting("screensaver_delay")
+    logger.dbg("ScreenLockPin: enable lock on wakeup (restore value: " .. (return_value or "nil") .. ")")
+    G_reader_settings:saveSetting("screenlockpin_restore_screensaver_delay", return_value)
+    G_reader_settings:saveSetting("screensaver_delay", "plugin:screenlockpin")
+end
+
+function restoreOriginScreensaverDelay()
+    if not isScreensaverDelay() then return end
+    local return_value = G_reader_settings:readSetting("screenlockpin_restore_screensaver_delay")
+    logger.dbg("ScreenLockPin: disable lock on wakeup (restore value: " .. (return_value or "nil -> disable") .. ")")
+    G_reader_settings:saveSetting("screensaver_delay", return_value or "disable")
+    G_reader_settings:delSetting("screenlockpin_restore_screensaver_delay")
+end
+
 local function setLockOnWakeup(bool)
-    if bool == shouldLockOnWakeup() then return false end
+    G_reader_settings:saveSetting("screenlockpin_onwakeup", bool)
+    if not isEnabled() then return end
     if bool then
-        local return_value = G_reader_settings:readSetting("screensaver_delay")
-        logger.dbg("ScreenLockPin: enable lock on wakeup (restore value: " .. (return_value or "nil") .. ")")
-        G_reader_settings:saveSetting("screenlockpin_restore_screensaver_delay", return_value)
-        G_reader_settings:saveSetting("screensaver_delay", "plugin:screenlockpin")
+        stashOriginScreensaverDelay()
     else
-        local return_value = G_reader_settings:readSetting("screenlockpin_restore_screensaver_delay")
-        logger.dbg("ScreenLockPin: disable lock on wakeup (restore value: " .. (return_value or "nil -> disable") .. ")")
-        G_reader_settings:saveSetting("screensaver_delay", return_value or "disable")
-        G_reader_settings:delSetting("screenlockpin_restore_screensaver_delay")
+        restoreOriginScreensaverDelay()
     end
-    return true
 end
 
 local function toggleLockOnWakeup()
-    return setLockOnWakeup(not shouldLockOnWakeup())
+    setLockOnWakeup(not shouldLockOnWakeup())
 end
 
 --
@@ -207,13 +259,15 @@ end
 
 local function purge()
     -- cause restore of foreign screensaver_delay setting
-    setLockOnWakeup(false)
+    if isEnabled() then restoreOriginScreensaverDelay() end
     -- delete all our settings
+    G_reader_settings:delSetting("screenlockpin_enabled")
     G_reader_settings:delSetting("screenlockpin_ui_scale")
     G_reader_settings:delSetting("screenlockpin_ui_pos_x")
     G_reader_settings:delSetting("screenlockpin_ui_pos_y")
     G_reader_settings:delSetting("screenlockpin_pin")
     G_reader_settings:delSetting("screenlockpin_onboot")
+    G_reader_settings:delSetting("screenlockpin_onwakeup")
     G_reader_settings:delSetting("screenlockpin_ratelimit")
     G_reader_settings:delSetting("screenlockpin_restore_screensaver_delay")
     G_reader_settings:delSetting("screenlockpin_note_mode")
@@ -223,6 +277,10 @@ end
 return {
     init = init,
     purge = purge,
+
+    getEnabled = isEnabled,
+    setEnabled = setEnabled,
+    toggleEnabled = toggleEnabled,
 
     getUiSettings = getUiSettings,
     setUiSettings = setUiSettings,

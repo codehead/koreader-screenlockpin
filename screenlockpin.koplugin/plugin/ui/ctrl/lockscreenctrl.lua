@@ -90,6 +90,7 @@ local function reuseShowOverlay()
 end
 
 local function onResume()
+    if not pluginSettings.getEnabled() then return end
     if not pluginSettings.shouldLockOnWakeup() then return end
     if not overlay then return end
     Device.screen_saver_lock = true
