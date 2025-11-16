@@ -3,6 +3,8 @@ local logger = require("logger")
 local UIManager = require("ui/uimanager")
 local EventListener = require("ui/widget/eventlistener")
 
+local pluginSettings = require("plugin/settings")
+
 local TIME_S = time.s(1)
 local LOCK_DURATIONS = {10, 30, 60}
 local LOCK_COUNTER_RESET_AFTER = time.s(300)
@@ -21,10 +23,29 @@ local Throttle = EventListener:extend {
     lock_counter = 0,
     paused_at = nil,
     resume_at = nil,
+
+    accumulated = {
+        attempts_by_length = nil,
+        lock_counter = nil,
+    },
 }
 
 function Throttle:init()
     self.attempts_by_length = {}
+    self.accumulated.attempts_by_length = pluginSettings.readPersistentCache("attempts_by_length") or {}
+    self.accumulated.lock_counter = pluginSettings.readPersistentCache("throttled_times") or 0
+end
+
+function Throttle:_incrementLockCounter()
+    self.lock_counter = self.lock_counter + 1
+    self.accumulated.lock_counter = self.accumulated.lock_counter + 1
+    pluginSettings.putPersistentCache("throttled_times", self.accumulated.lock_counter)
+end
+
+function Throttle:_incrementAttempts(len)
+    self.attempts_by_length[len] = (self.attempts_by_length[len] or 0) + 1
+    self.accumulated.attempts_by_length[len] = (self.accumulated.attempts_by_length[len] or 0) + 1
+    pluginSettings.putPersistentCache("attempts_by_length", self.accumulated.attempts_by_length)
 end
 
 function Throttle:pushAt(len)
@@ -34,13 +55,13 @@ function Throttle:pushAt(len)
         self:reset()
     end
     -- len: length of the attempted PIN
-    self.attempts_by_length[len] = (self.attempts_by_length[len] or 0) + 1
+    self:_incrementAttempts(len)
     logger.dbg(string.format("ScreenLockPin: throttle failures on %d digits: %d", len, self.attempts_by_length[len]))
     if self.attempts_by_length[len] >= FAIL_TRIGGER_PER_LENGTH then self:pause() end
 end
 
 function Throttle:pause()
-    self.lock_counter = self.lock_counter + 1
+    self:_incrementLockCounter()
     self.paused_at = time.now()
     local idx = math.min(#LOCK_DURATIONS, self.lock_counter)
     local duration = time.s(LOCK_DURATIONS[idx])

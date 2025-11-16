@@ -1,12 +1,16 @@
 local _ = require("gettext")
 local logger = require("logger")
 local Device = require("device")
+local ffiutil = require("ffi/util")
 local UIManager = require("ui/uimanager")
 local Screensaver = require("ui/screensaver")
+local InfoMessage = require("ui/widget/infomessage")
 local Screen = Device.screen
+local T = ffiutil.template
 
 local pluginSettings = require("plugin/settings")
 local screensaverUtil = require("plugin/util/screensaverutil")
+local screenshoterUtil = require("plugin/util/screenshoterutil")
 local NotesFrame = require("plugin/ui/lockscreen/notesframe")
 local LockScreenFrame = require("plugin/ui/lockscreen/lockscreenframe")
 
@@ -37,13 +41,35 @@ local function onScreenResize()
     relayout("full")
 end
 
-local function closeLockScreen()
-    if not overlay then return end
-    logger.dbg("ScreenLockPin: close lock screen")
+local function formatAttempts()
+    local attempts_by_length = pluginSettings.readPersistentCache("attempts_by_length") or {}
+    local str = ""
+    for len, attempts in pairs(attempts_by_length) do
+        if str ~= "" then str = str .. "\n" end
+        local line = "  " .. T(_("Length %1: %2 attempts"), len, attempts)
+        str = str .. line
+    end
+    return str
+end
+
+local function unlockScreen(cause)
+    if not overlay then return false end
+    logger.dbg("ScreenLockPin: close lock screen (" .. cause .. ")")
     screensaverUtil.unfreezeScreensaverAbi()
     screensaverUtil.totalCleanup()
+    screenshoterUtil.unfreezeScreenshoterAbi()
     UIManager:close(overlay, "full", overlay:getRefreshRegion())
     overlay = nil
+    local throttled_times = pluginSettings.readPersistentCache("throttled_times") or 0
+    if throttled_times >= 2 then
+        UIManager:show(InfoMessage:new{
+            text = T(_("Caution!\nHigh amount of failed PIN inputs detected.\n%1"), formatAttempts()),
+            icon = "notice-warning",
+        })
+        pluginSettings.putPersistentCache("throttled_times", 0)
+        pluginSettings.putPersistentCache("attempts_by_length", nil)
+    end
+    return true
 end
 
 local function onSuspend()
@@ -65,6 +91,7 @@ local function reuseShowOverlay()
 end
 
 local function onResume()
+    if not pluginSettings.getEnabled() then return end
     if not pluginSettings.shouldLockOnWakeup() then return end
     if not overlay then return end
     Device.screen_saver_lock = true
@@ -98,6 +125,9 @@ local function showOrClearLockScreen(cause)
     if overlay then return reuseShowOverlay() end
     logger.dbg("ScreenLockPin: create lock screen")
     screensaverUtil.freezeScreensaverAbi()
+    if pluginSettings.getPreventScreenshots() then
+        screenshoterUtil.freezeScreenshoterAbi()
+    end
     overlay = LockScreenFrame:new {
         -- UIManager performance tweaks
         modal = true,
@@ -111,7 +141,7 @@ local function showOrClearLockScreen(cause)
         -- UIManager hook (called on ui root elements)
         onResume = onResume,
         -- LockScreenFrame
-        on_unlock = closeLockScreen,
+        on_unlock = function () unlockScreen("valid_pin") end,
         on_show_notes = showNotes,
     }
     UIManager:show(overlay, "full", overlay:getRefreshRegion())
@@ -119,4 +149,6 @@ end
 
 return {
     showOrClearLockScreen = showOrClearLockScreen,
+    unlockScreen = unlockScreen,
+    isActive = function () return overlay ~= nil end,
 }

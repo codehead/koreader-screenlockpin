@@ -5,14 +5,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 [//]: # (## [Unreleased])
 
+## [2025.11-1] - 2025-11-16
+
+The major addition in this release is the (basic) frontlight control. Just tap
+anywhere but the lock screen to increase (top half) or decrease (bottom half)
+the screen brightness. An essential enhancement if you find yourself trying to
+unlock the device in the night after you've locked during in the day 😅
+
+In addition, I completed a couple of minor issues and introduced a new public
+API. May it spawn some interesting extension plugins…
+
+Enjoy! 🚀
+
+### Changed
+
+- [#19](https://github.com/oleasteo/koreader-screenlockpin/issues/19)
+  Screenshots are blocked on the lock screen (configurable).
+
+### Added
+
+- [#11](https://github.com/oleasteo/koreader-screenlockpin/issues/11)
+  Taps on the off-panel area increase (top) or decrease (bottom) the frontlight
+  brightness. Contributor: [HadyBazzi](https://github.com/HadyBazzi)
+- [#12](https://github.com/oleasteo/koreader-screenlockpin/issues/12)
+  A notification is shown after unlock, if PIN attempts failed too many times
+  (throttled at least twice) since locked.
+- Menu toggle to disable the lock screen. Whilst not directly useful via UI,
+  this option can be useful as a main switch via dispatcher actions (see below).
+- Provide dispatcher actions to unlock or en/disable the lock screen.
+- Provide well-defined public API for 3rd party plugins (see
+  [plugin/publicapi.lua](plugin/publicapi.lua) for details).
+
 ## [2025.11] - 2025-11-04
 
 The lock screen becomes even more customizable. With the new panel position
-controls, I personally put it in small to the right edge near the bottom, so I
-can unlock single-handedly. Feels so easy now 🪶
+controls, it can be put to the side for single-handed unlocking. I, myself, put
+it on the right edge close to the bottom with a small size.
+Feels way easier now ✨
 
-Also, as I'm gonna travel soon, I had to add customizable notes to the lock
-screen, just in case the device is lost (and found by some honest person) 🤞😅
+Also, as I'm going to travel soon, I just had to add customizable notes to the
+lock screen. A tiny insurance for when the device might get lost 🤞
 
 Have fun!
 

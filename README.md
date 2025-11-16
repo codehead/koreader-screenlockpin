@@ -8,22 +8,27 @@
 [KOReader](https://github.com/koreader/koreader) content from unauthorized
 access.
 
-![Lock Screen Preview](https://github.com/oleasteo/koreader-screenlockpin/blob/main/screenshots/preview.png?raw=true)
+![Lock Screen Preview](https://media.githubusercontent.com/media/oleasteo/koreader-screenlockpin/main/screenshots/preview.png)
 
 ---
 
 ## ✨ Features
 
-Just what you'd expect from a PIN lock screen, and more… 😅
+Just what you'd expect from a PIN lock screen…
 
-- 🗽 **Custom PIN length** — supports 3–12 digits
-- ◻️ **Privacy first** — hides everything but your wallpaper from public eyes
-- 🚀 **Lock on boot** — secures your device on KOReader boot (configurable)
-- 🔒 **Lock on wakeup** — secures your device after sleep (configurable)
-- 📃 **Contact notes** — so that honest people will know how to return your device
-- ⚡ **Instant unlock** — immediate response, no extra confirmation button
-- 🚥 **Rate Limiting** — short delays after repeated failed attempts
-- 🪶 **Lightweight design** — optimized for performance
+- 🔒 **Lock on wakeup** — secures your device after sleep
+- 🪝 **Lock on boot** — secures your device on KOReader boot
+- 🛡️ **Privacy first** — hides everything but your wallpaper from public eyes
+- 🚷 **Rate Limit** — forced delays after repeatedly failed attempts
+
+and more…
+
+- 🪄 **Instant unlock** — immediate response, no extra confirmation button
+- 🪧 **Contact notes** — people should know how to return a lost device
+- 🎯 **Customizable layout** — can be configured for single-handed use
+- 🔆 **Frontlight control** — easily turn on the screen light in a dark environment
+- 🪃 **Lightweight design** — optimized for performance
+- 🗽 **PIN length** — 3 to 12 digits
 
 This plugin is designed for **privacy and casual protection**, not cryptographic
 security.
@@ -54,6 +59,43 @@ or during wakeup from sleep mode.
 If you enable *lock on boot*, make sure to have some way of file access without
 unlocking the KOReader, in case you forget the PIN (see FAQ below).
 
+Actions for the dispatcher (e.g., Gesture manager) can be found in the *Device*
+group.
+
+---
+
+## 🛠️ Public API
+
+We do expose an interface to use in foreign plugins. For example, a plugin could
+use this API to disable the lock screen based on external factors like date or
+time.
+
+The interface can be accessed like this:
+
+```lua
+local PluginShare = require("pluginshare")
+
+function yourFunction()
+   local lockScreen = PluginShare.screen_lock_pin
+   if not lockScreen then return end
+   -- safely use lockScreen here
+   -- e.g., lockScreen:lock()
+end
+```
+
+See [publicapi.lua](plugin/publicapi.lua) for available
+methods. Please create an issue or PR if we're missing something that would be
+of use to you.
+
+If you've built a plugin that integrates with the lock screen, kindly open a PR
+to list it here for others to find.
+
+<!--
+
+- ➡️ [MyPlugin](https://…) – Brief description.
+
+-->
+
 ---
 
 ## 🧩 Compatibility
@@ -62,6 +104,7 @@ Designed for **KOReader v2025.08** and newer. Please report any compatibility
 issues you encounter.
 
 Tested devices:
+- ✅ Kindle (10th generation)
 - ✅ Kindle Oasis (10th generation)
 - ✅ Kobo Aura (N514)
 
