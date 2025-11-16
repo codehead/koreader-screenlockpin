@@ -5,6 +5,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 [//]: # (## [Unreleased])
 
+## [2025.11-1] - 2025-11-16
+
+The major addition in this release is the (basic) frontlight control. Just tap
+anywhere but the lock screen to increase (top half) or decrease (bottom half)
+the screen brightness. An essential enhancement if you find yourself trying to
+unlock the device in the night after you've locked during in the day 😅
+
+In addition, I completed a couple of minor issues and introduced a new public
+API. May it spawn some interesting extension plugins…
+
+Enjoy! 🚀
+
 ### Changed
 
 - [#19](https://github.com/oleasteo/koreader-screenlockpin/issues/19)
