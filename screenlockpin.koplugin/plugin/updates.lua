@@ -18,7 +18,7 @@ local Notification = require("ui/widget/notification")
 local T = ffiUtil.template
 
 local DEBUG_FORCE_UPDATE = false
---DEBUG_FORCE_UPDATE = true
+DEBUG_FORCE_UPDATE = true
 
 local function getPluginDir()
     return debug.getinfo(1, "S").source:match("@(.+%.koplugin)/")
@@ -124,141 +124,178 @@ local function downloadUpdate(plugin_dir, remote)
     end
 end
 
+local function _async_update_step(msg, ...)
+    local status_widget = InfoMessage:new { text = _(msg), dismissable = false }
+    UIManager:show(status_widget, "ui")
+    local step_concluded = function() UIManager:close(status_widget, "ui") end
+    local run_fns = table.pack(...)
+    UIManager:nextTick(function()
+        for _, run in ipairs(run_fns) do run(step_concluded) end
+    end)
+end
+
 local function perform_update(remote)
-    local plugin_dir = getPluginDir()
-    logger.dbg("ScreenLockPin: Detected plugin dir", plugin_dir)
-    if not plugin_dir then
-        logger.warn("ScreenLockPin: Failed to detect plugin root")
-        UIManager:show(InfoMessage:new {
-            text = _("Failed to detect plugin root.\nCannot perform update automatically."),
-        })
-        return
-    end
-    local bak_dir = plugin_dir .. ".old"
-    if lfs.attributes(bak_dir) ~= nil then
-        logger.warn("ScreenLockPin: Path already exists: " .. bak_dir)
-        UIManager:show(InfoMessage:new {
-            text = _("Path already exists: " .. bak_dir .. "\nMaybe an incomplete update beforehand?\nPlease resolve situation by hand."),
-        })
-        return
-    end
-    local update_file = downloadUpdate(plugin_dir, remote)
-    if not update_file then
-        logger.warn("ScreenLockPin: Failed to download update file")
-        UIManager:show(InfoMessage:new {
-            text = _("Failed to download update file.\nPlease check connection and try again."),
-        })
-        return
-    end
-    logger.dbg("ScreenLockPin: Moving " .. plugin_dir .. " to " .. bak_dir)
-    if not moveFile(plugin_dir, bak_dir) then
-        logger.warn("ScreenLockPin: Failed to move old plugin directory")
-        UIManager:show(InfoMessage:new {
-            text = _("Failed to move the old plugin directory.\nCannot perform update automatically."),
-        })
-        return
-    end
-    lfs.mkdir(plugin_dir)
-    logger.dbg("ScreenLockPin: Unpacking plugin archive " .. update_file .. " to " .. plugin_dir)
-    local ok, err = Device:unpackArchive(update_file, plugin_dir, true)
-    if not ok then
-        logger.warn("ScreenLockPin: Failed to extract update file", err)
-        local restoring = true
-        if lfs.attributes(plugin_dir) ~= nil then
-            logger.dbg("ScreenLockPin: [recovery] Purging", plugin_dir)
-            if not ffiUtil.purgeDir(plugin_dir) then restoring = false end
+    _async_update_step("Preparing for update…", function(step_concluded)
+        local plugin_dir = getPluginDir()
+        if not plugin_dir then
+            step_concluded()
+            logger.warn("ScreenLockPin: Failed to detect plugin root")
+            UIManager:show(InfoMessage:new {
+                text = _("Failed to detect plugin root.\nCannot perform update automatically."),
+            })
+            return
         end
-        if restoring then
-            logger.dbg("ScreenLockPin: [recovery] Moving " .. bak_dir .. " to " .. plugin_dir)
-            restoring = moveFile(bak_dir, plugin_dir)
+        local bak_dir = plugin_dir .. ".old"
+        logger.dbg("ScreenLockPin: Detected plugin dir", plugin_dir)
+        if lfs.attributes(bak_dir) ~= nil then
+            step_concluded()
+            logger.warn("ScreenLockPin: Path already exists: " .. bak_dir)
+            UIManager:show(InfoMessage:new {
+                text = _("Path already exists: " .. bak_dir .. "\nMaybe an incomplete update beforehand?\nPlease resolve situation by hand."),
+            })
+            return
         end
-        local restored = restoring
-        local text = _("Failed to extract update file.\nCannot perform update automatically.")
-        if not restored then
-            text = text .. "\n\n" .. _("Failed to clean up intermediate plugins/ directories.\nPlease resolve situation by hand.")
-        end
-        UIManager:show(InfoMessage:new { text = text })
-        return
-    end
-    local meta_file = plugin_dir .. "/_meta.lua"
-    if not lfs.attributes(meta_file) then
-        logger.warn("ScreenLockPin: Plugin validation failed (no _meta.lua file found).")
-        UIManager:show(InfoMessage:new {
-            text = T(_("Failed to verify the patched update.\n\nPlease check plugins/ directory and resolve situation by hand."),
-                    err or "reason unknown"),
-        })
-        return
-    end
-    local new_meta = dofile(plugin_dir .. "/_meta.lua")
-    if new_meta.version ~= remote.version then
-        logger.warn("ScreenLockPin: Updated plugin version mismatch. Got " .. new_meta.version .. ", expected " .. remote.version)
-        UIManager:show(InfoMessage:new {
-            text = T(_("Failed to verify the patched update (wrong version in _meta.lua).\n\nPlease check plugins/ directory and resolve situation by hand."),
-                    err or "reason unknown"),
-        })
-        return
-    end
-    meta = new_meta
-    logger.dbg("ScreenLockPin: [cleanup] Update extracted, purging old version", bak_dir)
-    local ok, err = ffiUtil.purgeDir(bak_dir)
-    if not ok then
-        logger.warn("ScreenLockPin: Failed to remove old plugin dir", err)
-        UIManager:show(InfoMessage:new {
-            text = T(_("Failed to perform cleanup operation after patching the update:\n%1\n\nPlease check plugins/ directory and remove the '.old' directory and zip file by hand."),
-                    err or "reason unknown"),
-        })
-        return
-    end
-    logger.dbg("ScreenLockPin: [cleanup] Removing plugin update archive", update_file)
-    local ok, err = os.remove(update_file)
-    if not ok then
-        logger.warn("ScreenLockPin: Failed to remove plugin update file", err)
-        UIManager:show(InfoMessage:new {
-            text = T(_("Failed to perform cleanup operation after patching the update:\n%1\n\nPlease check plugins/ directory and remove the zip file by hand."),
-                    err or "reason unknown"),
-        })
-        return
-    end
-    UIManager:askForRestart("Plugin updated successfully. To use the new version, the device must be restarted.")
-end
 
-local function proposeUpdate(remote)
-    UIManager:show(ConfirmBox:new{
-        text = T(_("Update to ScreenLockPin v%1 now?"), remote.version),
-        ok_text = _("Update"),
-        ok_callback = function() perform_update(remote) end,
-    })
-end
+        _async_update_step("Downloading…", step_concluded, function(step_concluded)
+            local update_file = downloadUpdate(plugin_dir, remote)
+            if not update_file then
+                step_concluded()
+                logger.warn("ScreenLockPin: Failed to download update file")
+                UIManager:show(InfoMessage:new {
+                    text = _("Failed to download update file.\nPlease check connection and try again."),
+                })
+                return
+            end
 
-local function showUpdateInfo(remote)
-    UIManager:show(InfoMessage:new {
-        show_icon = false,
-        text = _("Plugin update available: ") .. remote.version .. "\n" .. remote.name .. "\n\n" .. remote.description,
-        dismiss_callback = function() proposeUpdate(remote) end
-    })
+            _async_update_step("Applying update…", step_concluded, function(step_concluded)
+                logger.dbg("ScreenLockPin: Moving " .. plugin_dir .. " to " .. bak_dir)
+                local ok = moveFile(plugin_dir, bak_dir)
+                if not ok then
+                    step_concluded()
+                    logger.warn("ScreenLockPin: Failed to move old plugin directory")
+                    UIManager:show(InfoMessage:new {
+                        text = _("Failed to move the old plugin directory.\nCannot perform update automatically."),
+                    })
+                    return
+                end
+                lfs.mkdir(plugin_dir)
+                logger.dbg("ScreenLockPin: Unpacking plugin archive " .. update_file .. " to " .. plugin_dir)
+                local ok, err = Device:unpackArchive(update_file, plugin_dir, true)
+                if not ok then
+                    logger.warn("ScreenLockPin: Failed to extract update file", err)
+
+                    _async_update_step("Something went wrong. Rolling back…", step_concluded, function(step_concluded)
+                        local restoring = true
+                        if lfs.attributes(plugin_dir) ~= nil then
+                            logger.dbg("ScreenLockPin: [recovery] Purging", plugin_dir)
+                            if not ffiUtil.purgeDir(plugin_dir) then restoring = false end
+                        end
+                        if restoring then
+                            logger.dbg("ScreenLockPin: [recovery] Moving " .. bak_dir .. " to " .. plugin_dir)
+                            restoring = moveFile(bak_dir, plugin_dir)
+                        end
+                        step_concluded()
+                        local restored = restoring
+                        local text = _("Failed to extract update file.\nCannot perform update automatically.")
+                        if not restored then
+                            text = text .. "\n\n" .. _("Failed to clean up intermediate plugins/ directories.\nPlease resolve situation by hand.")
+                        end
+                        UIManager:show(InfoMessage:new { text = text })
+                    end)
+                    return
+                end
+
+                _async_update_step("Verifying update integrity…", step_concluded, function(step_concluded)
+                    local meta_file = plugin_dir .. "/_meta.lua"
+                    if not lfs.attributes(meta_file) then
+                        step_concluded()
+                        logger.warn("ScreenLockPin: Plugin validation failed (no _meta.lua file found).")
+                        UIManager:show(InfoMessage:new {
+                            text = T(_("Failed to verify the patched update.\n\nPlease check plugins/ directory and resolve situation by hand."),
+                                    err or "reason unknown"),
+                        })
+                        return
+                    end
+                    local new_meta = dofile(plugin_dir .. "/_meta.lua")
+                    if new_meta.version ~= remote.version then
+                        step_concluded()
+                        logger.warn("ScreenLockPin: Updated plugin version mismatch. Got " .. new_meta.version .. ", expected " .. remote.version)
+                        UIManager:show(InfoMessage:new {
+                            text = T(_("Failed to verify the patched update (wrong version in _meta.lua).\n\nPlease check plugins/ directory and resolve situation by hand."),
+                                    err or "reason unknown"),
+                        })
+                        return
+                    end
+                    meta = new_meta
+
+                    _async_update_step("Post-update cleanup…", step_concluded, function(step_concluded)
+                        logger.dbg("ScreenLockPin: [cleanup] Update extracted, purging old version", bak_dir)
+                        local ok, err = ffiUtil.purgeDir(bak_dir)
+                        if not ok then
+                            step_concluded()
+                            logger.warn("ScreenLockPin: Failed to remove old plugin dir", err)
+                            UIManager:show(InfoMessage:new {
+                                text = T(_("Failed to perform cleanup operation after patching the update:\n%1\n\nPlease check plugins/ directory and remove the '.old' directory and zip file by hand."),
+                                        err or "reason unknown"),
+                            })
+                            return
+                        end
+                        logger.dbg("ScreenLockPin: [cleanup] Removing plugin update archive", update_file)
+                        local ok, err = os.remove(update_file)
+                        if not ok then
+                            step_concluded()
+                            logger.warn("ScreenLockPin: Failed to remove plugin update file", err)
+                            UIManager:show(InfoMessage:new {
+                                text = T(_("Failed to perform cleanup operation after patching the update:\n%1\n\nPlease check plugins/ directory and remove the zip file by hand."),
+                                        err or "reason unknown"),
+                            })
+                            return
+                        end
+
+                        step_concluded()
+                        UIManager:askForRestart("Plugin updated successfully. To use the new version, the device must be restarted.")
+                    end)
+                end)
+            end)
+        end)
+    end)
 end
 
 local function checkNow()
     if not NetworkMgr:isWifiOn() then
         Notification:notify(_("Turn on Wi-Fi first."))
-        return false
+        return
     end
     if not NetworkMgr:isOnline() then
         Notification:notify(_("No internet connection."))
-        return false
+        return
     end
 
-    local ok, remote = fetchRemoteMeta()
-    if not ok then
-        Notification:notify(_("Failed to fetch plugin details."))
-        return false
-    end
-    if not DEBUG_FORCE_UPDATE and remote.version == meta.version then
-        Notification:notify(_("You're already up to date."), Notification.SOURCE_DISPATCHER)
-        return true, nil
-    end
-    showUpdateInfo(remote)
-    return true, remote
+    _async_update_step("Checking for update…", function(step_concluded)
+        local ok, remote = fetchRemoteMeta()
+        if not ok then
+            step_concluded()
+            Notification:notify(_("Failed to fetch plugin details."))
+            return
+        end
+        if not DEBUG_FORCE_UPDATE and remote.version == meta.version then
+            step_concluded()
+            Notification:notify(_("You're already up to date."), Notification.SOURCE_DISPATCHER)
+            return
+        end
+        step_concluded()
+        UIManager:show(InfoMessage:new {
+            show_icon = false,
+            text = _("Plugin update available: ") .. remote.version .. "\n" .. remote.name .. "\n\n" .. remote.description,
+            dismiss_callback = function()
+                UIManager:show(ConfirmBox:new{
+                    text = T(_("Update to ScreenLockPin v%1 now?"), remote.version),
+                    ok_text = _("Update"),
+                    ok_callback = function() perform_update(remote) end,
+                })
+            end
+        })
+    end)
 end
 
 return { checkNow = checkNow }
