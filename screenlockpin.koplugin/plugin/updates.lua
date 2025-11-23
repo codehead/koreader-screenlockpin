@@ -114,7 +114,7 @@ local function downloadUpdate(plugin_dir, remote)
     local local_target = plugin_dir .. "_" .. remote.version .. ".zip"
     if lfs.attributes(local_target) ~= nil then
         logger.warn("ScreenLockPin: Found update archive, re-using it…")
-        Notification:notify(_("Update file present; skipping download."))
+        Notification:notify(_("Update file present; skipping download."), Notification.SOURCE_DISPATCHER)
         return local_target
     end
     if downloadFile(local_target, remote.zip_url) then
@@ -263,11 +263,11 @@ end
 
 local function checkNow()
     if not NetworkMgr:isWifiOn() then
-        Notification:notify(_("Turn on Wi-Fi first."))
+        Notification:notify(_("Turn on Wi-Fi first."), Notification.SOURCE_DISPATCHER)
         return
     end
     if not NetworkMgr:isOnline() then
-        Notification:notify(_("No internet connection."))
+        Notification:notify(_("No internet connection."), Notification.SOURCE_DISPATCHER)
         return
     end
 
@@ -275,7 +275,7 @@ local function checkNow()
         local ok, remote = fetchRemoteMeta()
         if not ok then
             step_concluded()
-            Notification:notify(_("Failed to fetch plugin details."))
+            Notification:notify(_("Failed to fetch plugin details."), Notification.SOURCE_DISPATCHER)
             return
         end
         if not DEBUG_FORCE_UPDATE and remote.version == meta.version then
