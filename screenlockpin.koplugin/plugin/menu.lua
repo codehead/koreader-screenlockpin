@@ -1,7 +1,7 @@
 local _ = require("gettext")
 
 local pluginSettings = require("plugin/settings")
-local pluginUpdates = require("plugin/updates")
+local pluginUpdater = require("plugin/updater")
 local settingsCtrl = require("plugin/ui/ctrl/settingsctrl")
 
 local function options_enabled()
@@ -43,7 +43,7 @@ return {
         {
             text = _("Check for updates"),
             keep_menu_open = true,
-            callback = pluginUpdates.checkNow,
+            callback = pluginUpdater.checkNow,
             separator = true,
         },
         {

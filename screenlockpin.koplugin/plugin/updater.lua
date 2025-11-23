@@ -1,3 +1,25 @@
+-- MIT License
+--
+-- Copyright (c) 2025 Ole Asteo
+--
+-- Permission is hereby granted, free of charge, to any person obtaining a copy
+-- of this software and associated documentation files (the "Software"), to deal
+-- in the Software without restriction, including without limitation the rights
+-- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-- copies of the Software, and to permit persons to whom the Software is
+-- furnished to do so, subject to the following conditions:
+--
+-- The above copyright notice and this permission notice shall be included in
+-- all copies or substantial portions of the Software.
+--
+-- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+-- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+-- SOFTWARE.
+
 local _ = require("gettext")
 local BD = require("ui/bidi")
 local lfs = require("libs/libkoreader-lfs")
@@ -17,8 +39,36 @@ local InfoMessage = require("ui/widget/infomessage")
 local Notification = require("ui/widget/notification")
 local T = ffiUtil.template
 
+--
+-- Feel free to copy & adapt this updater for your plugin. If you're using
+-- GitHub releases, all you need to do is specify a `name`, `fullname`,
+-- `update_url`, and `version` in your _meta.lua file.
+--
+-- Technically, we just expect the `update_url` API to respond with JSON that
+-- satisfies
+--   {
+--     name: string,
+--     tag_name: string,
+--     assets?: { content_type: string, browser_download_url: string }[],
+--     zipball_url: string,
+--     body: string
+--   }
+--
+-- The `tag_name` must match the _meta.lua#version field, but may have a leading
+-- "v" as to common git practice.
+--
+-- If any asset has `content_type == "application/zip"` (e.g., custom zip file
+-- attached to the GitHub release), its `browser_download_url` is used as update
+-- file. If no asset matches this content type, we default to `zipball_url`
+-- (source code zip file of GitHub releases).
+--
+-- This is version 1 of the updater as of 2025-11. You should not need to change
+-- any of the code below.
+--
+
+
 local DEBUG_FORCE_UPDATE = false
-DEBUG_FORCE_UPDATE = true
+--DEBUG_FORCE_UPDATE = true
 
 local function getPluginDir()
     return debug.getinfo(1, "S").source:match("@(.+%.koplugin)/")
@@ -31,6 +81,13 @@ end
 
 local meta = dofile(getPluginDir() .. "/_meta.lua")
 
+local function dbg(...)
+    logger.dbg("[" .. meta.name .. ":updater]", ...)
+end
+local function warn(...)
+    logger.warn("[" .. meta.name .. ":updater]", ...)
+end
+
 local function fetchRemoteMeta()
     local sink = {}
     socketutil:set_timeout()
@@ -39,30 +96,30 @@ local function fetchRemoteMeta()
         method  = "GET",
         sink    = ltn12.sink.table(sink),
     }
-    logger.dbg("ScreenLockPin: Calling", request.url)
+    dbg("Fetching meta information on latest update", request.url)
     local code, headers, status = socket.skip(1, http.request(request))
     socketutil:reset_timeout()
     -- check network error
     if headers == nil then
-        logger.warn("ScreenLockPin: Network unreachable", status or code or "unknown")
+        warn("Network unreachable", status or code or "unknown")
         return false
     end
     -- check HTTP error
     if code ~= 200 then
-        logger.warn("ScreenLockPin: HTTP status unexpected:", status or code or "unknown")
-        logger.dbg("ScreenLockPin: Response headers:", headers)
+        warn("HTTP status unexpected:", status or code or "unknown")
+        dbg("HTTP response headers:", headers)
         return false
     end
     -- quick check content JSON format
     local content = table.concat(sink)
     if content == "" or content:sub(1, 1) ~= "{" then
-        logger.warn("ScreenLockPin: Expected JSON response, got", content)
+        warn("Expected plugin meta JSON response, got", content)
         return false
     end
     -- parse JSON
     local ok, data = pcall(JSON.decode, content, JSON.decode.simple)
     if not ok or not data then
-        logger.warn("ScreenLockPin: Failed to parse JSON", data)
+        warn("Failed to parse plugin meta JSON", data)
         return false
     end
     -- parse version
@@ -76,18 +133,19 @@ local function fetchRemoteMeta()
             break
         end
     end
-    local remote_zip_url = remote_zip_asset and remote_zip_asset.browser_download_url
-    logger.dbg("ScreenLockPin: Latest upstream version:", data.name, remote_version, remote_zip_url, data.body)
+    local remote_zip_url = remote_zip_asset and remote_zip_asset.browser_download_url or data.zipball_url
+    local remote_description = data.body or ""
+    dbg("Parsed plugin meta successfully:", string.format("name = %s | version = %s | zip_url = %s", data.name, remote_version, remote_zip_url))
     return true, {
         name = data.name,
         version = remote_version,
-        description = data.body,
+        description = remote_description,
         zip_url = remote_zip_url,
     }
 end
 
 local function downloadFile(local_path, remote_url)
-    logger.dbg("ScreenLockPin: Downloading file", local_path, "from", remote_url)
+    dbg("Downloading update file from", remote_url, "; saving as", local_path)
     socketutil:set_timeout(socketutil.FILE_BLOCK_TIMEOUT, socketutil.FILE_TOTAL_TIMEOUT)
     local code, headers, status = socket.skip(1, http.request {
         url      = remote_url,
@@ -96,8 +154,8 @@ local function downloadFile(local_path, remote_url)
     socketutil:reset_timeout()
     if code ~= 200 then
         util.removeFile(local_path)
-        logger.dbg("ScreenLockPin: Request failed:", status or code)
-        logger.dbg("ScreenLockPin: Response headers:", headers)
+        dbg("Download failed:", status or code)
+        dbg("HTTP response headers:", headers)
         UIManager:show(InfoMessage:new {
             text = T(_("Could not save file to:\n%1\n%2"),
                     BD.filepath(local_path),
@@ -105,15 +163,14 @@ local function downloadFile(local_path, remote_url)
         })
         return false
     end
-    logger.dbg("ScreenLockPin: File downloaded to", local_path)
+    dbg("Plugin update file download succeeded:", local_path)
     return true
 end
 
 local function downloadUpdate(plugin_dir, remote)
-    logger.dbg("ScreenLockPin: Downloading plugin update…")
     local local_target = plugin_dir .. "_" .. remote.version .. ".zip"
     if lfs.attributes(local_target) ~= nil then
-        logger.warn("ScreenLockPin: Found update archive, re-using it…")
+        warn("Update file already present in file system. Re-using it to avoid re-download.")
         Notification:notify(_("Update file found. Skipping download."), Notification.SOURCE_DISPATCHER)
         return local_target
     end
@@ -139,19 +196,19 @@ local function perform_update(remote)
         local plugin_dir = getPluginDir()
         if not plugin_dir then
             step_concluded()
-            logger.warn("ScreenLockPin: Failed to detect plugin root")
+            warn("Failed to detect plugin root")
             UIManager:show(InfoMessage:new {
                 text = _("Failed to detect plugin root.\nCannot perform update automatically."),
             })
             return
         end
-        local bak_dir = plugin_dir .. ".old"
-        logger.dbg("ScreenLockPin: Detected plugin dir", plugin_dir)
-        if lfs.attributes(bak_dir) ~= nil then
+        local backup_dir = plugin_dir .. ".backup"
+        dbg("Detected plugin dir", plugin_dir)
+        if lfs.attributes(backup_dir) ~= nil then
             step_concluded()
-            logger.warn("ScreenLockPin: Path already exists: " .. bak_dir)
+            warn("Path already exists: " .. backup_dir)
             UIManager:show(InfoMessage:new {
-                text = _("Path already exists: " .. bak_dir .. "\nMaybe an incomplete update beforehand?\nPlease resolve situation by hand."),
+                text = _("Path already exists: " .. backup_dir .. "\nMaybe an incomplete update beforehand?\nPlease resolve situation by hand."),
             })
             return
         end
@@ -160,7 +217,7 @@ local function perform_update(remote)
             local update_file = downloadUpdate(plugin_dir, remote)
             if not update_file then
                 step_concluded()
-                logger.warn("ScreenLockPin: Failed to download update file")
+                warn("Failed to download update file")
                 UIManager:show(InfoMessage:new {
                     text = _("Failed to download update file.\nPlease check connection and try again."),
                 })
@@ -168,31 +225,31 @@ local function perform_update(remote)
             end
 
             _async_update_step("Applying update…", step_concluded, function(step_concluded)
-                logger.dbg("ScreenLockPin: Moving " .. plugin_dir .. " to " .. bak_dir)
-                local ok = moveFile(plugin_dir, bak_dir)
+                dbg("Moving " .. plugin_dir .. " to " .. backup_dir)
+                local ok = moveFile(plugin_dir, backup_dir)
                 if not ok then
                     step_concluded()
-                    logger.warn("ScreenLockPin: Failed to move old plugin directory")
+                    warn("Failed to move old plugin directory")
                     UIManager:show(InfoMessage:new {
                         text = _("Failed to move the old plugin directory.\nCannot perform update automatically."),
                     })
                     return
                 end
                 lfs.mkdir(plugin_dir)
-                logger.dbg("ScreenLockPin: Unpacking plugin archive " .. update_file .. " to " .. plugin_dir)
+                dbg("Unpacking plugin archive " .. update_file .. " to " .. plugin_dir)
                 local ok, err = Device:unpackArchive(update_file, plugin_dir, true)
                 if not ok then
-                    logger.warn("ScreenLockPin: Failed to extract update file", err)
+                    warn("Failed to extract update file", err)
 
                     _async_update_step("Something went wrong. Rolling back…", step_concluded, function(step_concluded)
                         local restoring = true
                         if lfs.attributes(plugin_dir) ~= nil then
-                            logger.dbg("ScreenLockPin: [recovery] Purging", plugin_dir)
+                            dbg("[recovery] Purging", plugin_dir)
                             if not ffiUtil.purgeDir(plugin_dir) then restoring = false end
                         end
                         if restoring then
-                            logger.dbg("ScreenLockPin: [recovery] Moving " .. bak_dir .. " to " .. plugin_dir)
-                            restoring = moveFile(bak_dir, plugin_dir)
+                            dbg("[recovery] Moving " .. backup_dir .. " to " .. plugin_dir)
+                            restoring = moveFile(backup_dir, plugin_dir)
                         end
                         step_concluded()
                         local restored = restoring
@@ -209,7 +266,7 @@ local function perform_update(remote)
                     local meta_file = plugin_dir .. "/_meta.lua"
                     if not lfs.attributes(meta_file) then
                         step_concluded()
-                        logger.warn("ScreenLockPin: Plugin validation failed (no _meta.lua file found).")
+                        warn("Plugin validation failed (no _meta.lua file found).")
                         UIManager:show(InfoMessage:new {
                             text = T(_("Failed to verify the patched update.\n\nPlease check plugins/ directory and resolve situation by hand."),
                                     err or "reason unknown"),
@@ -219,7 +276,7 @@ local function perform_update(remote)
                     local new_meta = dofile(plugin_dir .. "/_meta.lua")
                     if new_meta.version ~= remote.version then
                         step_concluded()
-                        logger.warn("ScreenLockPin: Updated plugin version mismatch. Got " .. new_meta.version .. ", expected " .. remote.version)
+                        warn("Updated plugin version mismatch. Got " .. new_meta.version .. ", expected " .. remote.version)
                         UIManager:show(InfoMessage:new {
                             text = T(_("Failed to verify the patched update (wrong version in _meta.lua).\n\nPlease check plugins/ directory and resolve situation by hand."),
                                     err or "reason unknown"),
@@ -229,22 +286,22 @@ local function perform_update(remote)
                     meta = new_meta
 
                     _async_update_step("Post-update cleanup…", step_concluded, function(step_concluded)
-                        logger.dbg("ScreenLockPin: [cleanup] Update extracted, purging old version", bak_dir)
-                        local ok, err = ffiUtil.purgeDir(bak_dir)
+                        dbg("[cleanup] Update extracted, purging old version", backup_dir)
+                        local ok, err = ffiUtil.purgeDir(backup_dir)
                         if not ok then
                             step_concluded()
-                            logger.warn("ScreenLockPin: Failed to remove old plugin dir", err)
+                            warn("Failed to remove old plugin dir", err)
                             UIManager:show(InfoMessage:new {
-                                text = T(_("Failed to perform cleanup operation after patching the update:\n%1\n\nPlease check plugins/ directory and remove the '.old' directory and zip file by hand."),
+                                text = T(_("Failed to perform cleanup operation after patching the update:\n%1\n\nPlease check plugins/ directory and remove the '.backup' directory and zip file by hand."),
                                         err or "reason unknown"),
                             })
                             return
                         end
-                        logger.dbg("ScreenLockPin: [cleanup] Removing plugin update archive", update_file)
+                        dbg("[cleanup] Removing plugin update archive", update_file)
                         local ok, err = os.remove(update_file)
                         if not ok then
                             step_concluded()
-                            logger.warn("ScreenLockPin: Failed to remove plugin update file", err)
+                            warn("Failed to remove plugin update file", err)
                             UIManager:show(InfoMessage:new {
                                 text = T(_("Failed to perform cleanup operation after patching the update:\n%1\n\nPlease check plugins/ directory and remove the zip file by hand."),
                                         err or "reason unknown"),
@@ -261,35 +318,65 @@ local function perform_update(remote)
     end)
 end
 
-local function checkNow()
+--- Check for updates.
+---
+--- Args can have the following options:
+--- args.silent = false: If true, don't show any notifications during the check
+---   for updates. E.g., use this for background checks.
+--- args.checked_callback(update_found:boolean): Is called after a successful
+---   check (fetching update meta worked). We're already on latest, iff
+---   `update_found` is false.
+local function checkNow(args)
+    if not args then args = {} end
+    local silent = args.silent or false
+    local checked_callback = args.checked_callback or function() end
+
     if not NetworkMgr:isWifiOn() then
-        Notification:notify(_("Turn on Wi-Fi first."), Notification.SOURCE_DISPATCHER)
+        dbg("No wi-fi")
+        if not silent then
+            Notification:notify(_("Turn on Wi-Fi first."), Notification.SOURCE_DISPATCHER)
+        end
         return
     end
     if not NetworkMgr:isOnline() then
-        Notification:notify(_("No internet connection."), Notification.SOURCE_DISPATCHER)
+        dbg("Not online")
+        if not silent then
+            Notification:notify(_("No internet connection."), Notification.SOURCE_DISPATCHER)
+        end
         return
     end
 
-    _async_update_step("Checking for update…", function(step_concluded)
+    _async_update_step((silent and {} or { "Checking for update…" })[1], function(step_concluded)
         local ok, remote = fetchRemoteMeta()
         if not ok then
             step_concluded()
-            Notification:notify(_("Failed to fetch plugin details."), Notification.SOURCE_DISPATCHER)
+            if not silent then
+                Notification:notify(_("Failed to fetch plugin details."), Notification.SOURCE_DISPATCHER)
+            end
             return
         end
-        if not DEBUG_FORCE_UPDATE and remote.version == meta.version then
-            step_concluded()
-            Notification:notify(_("You're already up to date."), Notification.SOURCE_DISPATCHER)
-            return
+        if DEBUG_FORCE_UPDATE then
+            dbg("Skipping version check due to debug flag.")
+        else
+            if remote.version == meta.version then
+                dbg("Already on latest version. Remote:", remote.version, "Local:", meta.version)
+                step_concluded()
+                if not silent then
+                    Notification:notify(T(_("You're already up to date (v%1)"), meta.version), Notification.SOURCE_DISPATCHER)
+                end
+                checked_callback(false)
+                return
+            end
+            dbg("Version mismatch; assuming update available. Remote:", remote.version, "Local:", meta.version)
         end
         step_concluded()
+        checked_callback(true)
         UIManager:show(InfoMessage:new {
             show_icon = false,
             text = _("Plugin update available: ") .. remote.version .. "\n" .. remote.name .. "\n\n" .. remote.description,
             dismiss_callback = function()
                 UIManager:show(ConfirmBox:new{
-                    text = T(_("Update to ScreenLockPin v%1 now?"), remote.version),
+                    text = T(_("Update to %1 v%2 now?"), meta.fullname, remote.version),
                     ok_text = _("Update"),
                     ok_callback = function() perform_update(remote) end,
                 })
@@ -298,4 +385,6 @@ local function checkNow()
     end)
 end
 
-return { checkNow = checkNow }
+return {
+    checkNow = checkNow,
+}
