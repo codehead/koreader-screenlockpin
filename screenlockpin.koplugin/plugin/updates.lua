@@ -114,7 +114,7 @@ local function downloadUpdate(plugin_dir, remote)
     local local_target = plugin_dir .. "_" .. remote.version .. ".zip"
     if lfs.attributes(local_target) ~= nil then
         logger.warn("ScreenLockPin: Found update archive, re-using it…")
-        Notification:notify(_("Update file present; skipping download."), Notification.SOURCE_DISPATCHER)
+        Notification:notify(_("Update file found. Skipping download."), Notification.SOURCE_DISPATCHER)
         return local_target
     end
     if downloadFile(local_target, remote.zip_url) then
@@ -196,7 +196,7 @@ local function perform_update(remote)
                         end
                         step_concluded()
                         local restored = restoring
-                        local text = _("Failed to extract update file.\nCannot perform update automatically.")
+                        local text = _("Failed to extract update file.\nCannot perform update automatically.\nCheck the update zip file inside plugins/ directory.")
                         if not restored then
                             text = text .. "\n\n" .. _("Failed to clean up intermediate plugins/ directories.\nPlease resolve situation by hand.")
                         end
