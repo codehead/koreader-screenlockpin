@@ -439,7 +439,15 @@ local function checkNow(args)
                 UIManager:show(ConfirmBox:new{
                     text = T(_("Update to %1 v%2 now?"), meta.fullname, remote.version),
                     ok_text = _("Update"),
-                    ok_callback = function() perform_update(remote) end,
+                    ok_callback = function()
+                        if Device.isEmulator() then
+                            UIManager:show(InfoMessage:new {
+                                text = _("Emulator detected.\nWe don't patch updates in emulator to spare you from nuking local code changes.\nIf you need to test the updater, use desktop KOReader instead."),
+                            })
+                            return
+                        end
+                        perform_update(remote)
+                    end,
                 })
             end
         })
