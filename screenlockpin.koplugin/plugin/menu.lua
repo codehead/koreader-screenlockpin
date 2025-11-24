@@ -1,4 +1,5 @@
 local _ = require("gettext")
+local Device = require("device")
 
 local pluginSettings = require("plugin/settings")
 local pluginUpdater = require("plugin/updater")
@@ -8,7 +9,7 @@ local function options_enabled()
     return pluginSettings.getEnabled()
 end
 
-return {
+local menu = {
     sorting_hint = "screen",
     text = _("Lock screen"),
     sub_item_table = {
@@ -53,3 +54,9 @@ return {
         },
     }
 }
+
+if not Device:canSuspend() then
+    table.remove(menu.sub_item_table, 2)
+end
+
+return menu

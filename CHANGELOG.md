@@ -18,6 +18,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Hide screenshot related options on desktop devices.
 - [#30](https://github.com/oleasteo/koreader-screenlockpin/issues/30)
   Fill backdrop on desktop devices.
+- [#29](https://github.com/oleasteo/koreader-screenlockpin/issues/29)
+  Hide lock on wakeup on devices that cannot suspend.
 
 ## [2025.11-1] - 2025-11-16
 
