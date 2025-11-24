@@ -24,6 +24,7 @@ local _ = require("gettext")
 local BD = require("ui/bidi")
 local lfs = require("libs/libkoreader-lfs")
 local logger = require("logger")
+local time = require("ui/time")
 local http = require("socket.http")
 local util = require("util")
 local JSON = require("json")
@@ -35,38 +36,48 @@ local socketutil = require("socketutil")
 local UIManager = require("ui/uimanager")
 local NetworkMgr = require("ui/network/manager")
 local ConfirmBox = require("ui/widget/confirmbox")
+local PluginShare = require("pluginshare")
 local InfoMessage = require("ui/widget/infomessage")
 local Notification = require("ui/widget/notification")
+local EventListener = require("ui/widget/eventlistener")
 local T = ffiUtil.template
 
---
--- Feel free to copy & adapt this updater for your plugin. If you're using
--- GitHub releases, all you need to do is specify a `name`, `fullname`,
--- `update_url`, and `version` in your _meta.lua file.
---
--- Technically, we just expect the `update_url` API to respond with JSON that
--- satisfies
---   {
---     name: string,
---     tag_name: string,
---     assets?: { content_type: string, browser_download_url: string }[],
---     zipball_url: string,
---     body: string
---   }
---
--- The `tag_name` must match the _meta.lua#version field, but may have a leading
--- "v" as to common git practice.
---
--- If any asset has `content_type == "application/zip"` (e.g., custom zip file
--- attached to the GitHub release), its `browser_download_url` is used as update
--- file. If no asset matches this content type, we default to `zipball_url`
--- (source code zip file of GitHub releases).
---
--- This is version 1 of the updater as of 2025-11. You should not need to change
--- any of the code below.
---
+--[[
 
+Feel free to copy & adapt this updater for your plugin. If you're using
+GitHub releases, all you need to do is specify a `name`, `fullname`,
+`update_url`, and `version` in your _meta.lua file.
 
+Technically, we just expect the `update_url` API to respond with JSON that
+satisfies
+  {
+    name: string,
+    tag_name: string,
+    assets?: { content_type: string, browser_download_url: string }[],
+    zipball_url: string,
+    body: string
+  }
+
+The `tag_name` must match the _meta.lua#version field, but may have a leading
+"v" as to common git practice.
+
+If any asset has `content_type == "application/zip"` (e.g., custom zip file
+attached to the GitHub release), its `browser_download_url` is used as update
+file. If no asset matches this content type, we default to `zipball_url`
+(source code zip file of GitHub releases).
+
+We expose a public API as `PluginShare.plugin_updater`.
+Use it to control (all) instances of the updater from different plugins.
+
+You should not need to change any of the code below.
+
+--]]
+
+-- just a hint for plugin authors to recognize the need to update this file
+local UPDATER_VERSION = 1 -- 2025-11
+
+--- if true (uncomment line below), we still propose update if latest version
+--- matches the installed version
 local DEBUG_FORCE_UPDATE = false
 --DEBUG_FORCE_UPDATE = true
 
@@ -80,6 +91,30 @@ local function moveFile(src, dest)
 end
 
 local meta = dofile(getPluginDir() .. "/_meta.lua")
+local settingId = "plugin_updater#" .. meta.name
+local publicApi
+
+if not PluginShare.plugin_updater then
+    -- Reminder: This public API should stay backward compatible; extend, don't break.
+    PluginShare.plugin_updater = EventListener:extend {
+        _pause_checks = {},
+        modules = {},
+        --- Registers a global handler suppress checking for updates in the
+        --- background. This is intended for things like lock screens, etc.
+        --- @param predicate function Should return `false` to indicate that checks may be run, `true` to indicate to ask again in 60 seconds, or a function that receives a callback to call when to ask again.
+        pauseAllWhile = function(predicate)
+            table.insert(PluginShare.plugin_updater._pause_checks, predicate)
+        end,
+    }
+end
+publicApi = PluginShare.plugin_updater
+publicApi.modules[meta.name] = {
+    version = meta.version,
+    settingId = settingId,
+    updater_version = UPDATER_VERSION,
+}
+
+local auto_checker
 
 local function dbg(...)
     logger.dbg("[" .. meta.name .. ":updater]", ...)
@@ -181,11 +216,14 @@ local function downloadUpdate(plugin_dir, remote)
     end
 end
 
-local function _async_update_step(msg, ...)
-    local status_widget = InfoMessage:new { text = _(msg), dismissable = false }
-    UIManager:show(status_widget, "ui")
-    local step_concluded = function() UIManager:close(status_widget, "ui") end
+local function _async_update_step(text, ...)
     local run_fns = table.pack(...)
+    local step_concluded = function() end
+    if text ~= nil then
+        local status_widget = InfoMessage:new { text = _(text), dismissable = false }
+        UIManager:show(status_widget, "ui")
+        step_concluded = function() UIManager:close(status_widget, "ui") end
+    end
     UIManager:nextTick(function()
         for _, run in ipairs(run_fns) do run(step_concluded) end
     end)
@@ -318,17 +356,34 @@ local function perform_update(remote)
     end)
 end
 
---- Check for updates.
+local function markCheckedAt(timestamp)
+    dbg("AutoChecker: store latest checked at", timestamp)
+    G_reader_settings:saveSetting(settingId .. ":checked_at", timestamp or time.now())
+end
+
+local function getAutoCheckThrottleDelayFts(throttle_duration_s)
+    local last_check = G_reader_settings:readSetting(settingId .. ":checked_at")
+    if not last_check then
+        dbg("AutoChecker: no stored latest checked at found")
+        return 0
+    end
+    local now = time.now()
+    local elapsed_fts = now - last_check
+    local interval_fts = time.s(throttle_duration_s)
+    local diff_fts = interval_fts - elapsed_fts
+    dbg("AutoChecker: found latest checked at; diff =", time.to_s(diff_fts), "seconds")
+    return math.max(0, diff_fts)
+end
+
+--- Checks for updates.
 ---
---- Args can have the following options:
---- args.silent = false: If true, don't show any notifications during the check
----   for updates. E.g., use this for background checks.
---- args.checked_callback(update_found:boolean): Is called after a successful
----   check (fetching update meta worked). We're already on latest, iff
----   `update_found` is false.
+--- @param args.silent boolean If true, don't show any notifications during the check for updates. E.g., use this for background checks.
+--- @param args.failed_callback function Called with error string after an unsuccessful check (e.g., connection failed).
+--- @param args.checked_callback function Called after a successful check. The passed boolean indicates if an update is available.
 local function checkNow(args)
     if not args then args = {} end
     local silent = args.silent or false
+    local failed_callback = args.failed_callback or function() end
     local checked_callback = args.checked_callback or function() end
 
     if not NetworkMgr:isWifiOn() then
@@ -336,6 +391,7 @@ local function checkNow(args)
         if not silent then
             Notification:notify(_("Turn on Wi-Fi first."), Notification.SOURCE_DISPATCHER)
         end
+        failed_callback("No Wi-Fi")
         return
     end
     if not NetworkMgr:isOnline() then
@@ -343,6 +399,7 @@ local function checkNow(args)
         if not silent then
             Notification:notify(_("No internet connection."), Notification.SOURCE_DISPATCHER)
         end
+        failed_callback("Not online")
         return
     end
 
@@ -353,6 +410,7 @@ local function checkNow(args)
             if not silent then
                 Notification:notify(_("Failed to fetch plugin details."), Notification.SOURCE_DISPATCHER)
             end
+            failed_callback("Fetch failed")
             return
         end
         if DEBUG_FORCE_UPDATE then
@@ -364,12 +422,15 @@ local function checkNow(args)
                 if not silent then
                     Notification:notify(T(_("You're already up to date (v%1)"), meta.version), Notification.SOURCE_DISPATCHER)
                 end
+                markCheckedAt()
+                if auto_checker then auto_checker:reschedule() end
                 checked_callback(false)
                 return
             end
             dbg("Version mismatch; assuming update available. Remote:", remote.version, "Local:", meta.version)
         end
         step_concluded()
+        markCheckedAt()
         checked_callback(true)
         UIManager:show(InfoMessage:new {
             show_icon = false,
@@ -385,6 +446,162 @@ local function checkNow(args)
     end)
 end
 
+local DURATION_SECOND = 1
+local DURATION_MINUTE = DURATION_SECOND * 60
+local DURATION_HOUR = DURATION_MINUTE * 60
+local DURATION_DAY = DURATION_HOUR * 24
+local DURATION_WEEK = DURATION_DAY * 7
+local DURATION_4WEEKS = DURATION_WEEK * 4
+
+local BACKOFF = {
+    DURATION_SECOND * 20,
+    DURATION_MINUTE,
+    DURATION_MINUTE * 20,
+    DURATION_HOUR * 2,
+    DURATION_DAY,
+}
+
+local AutoChecker = EventListener:extend {
+    min_seconds_between_checks = DURATION_WEEK,
+    pause_while = nil,
+    stopped = false,
+    backoff_idx = 0,
+    _scheduleId = 0,
+}
+
+function AutoChecker:free()
+    self.stopped = true
+    self.pause_while = nil
+end
+
+local function scheduleInOneMinute(cb)
+    UIManager:scheduleIn(DURATION_MINUTE, cb)
+end
+
+local function parsePauseSchedulerFactory(fn)
+    if not fn then return false end
+    local result = fn()
+    if not result then return false end
+    if result == true then return scheduleInOneMinute end
+    return result
+end
+
+function AutoChecker:_getPauseScheduler()
+    if self.stopped then return nil end
+    local res = parsePauseSchedulerFactory(self.pause_while)
+    if res then return res, "local pause" end
+    for idx, fn in ipairs(publicApi._pause_checks) do
+        local res = parsePauseSchedulerFactory(fn)
+        if res then return res, "global pause #" .. idx end
+    end
+    if Device.screen_saver_mode then return scheduleInOneMinute, "screensaver mode" end
+    if Device.screen_saver_lock then return scheduleInOneMinute, "screensaver lock" end
+    return nil
+end
+
+function AutoChecker:checkNow()
+    if self.stopped then return end
+    local rescheduleFn, reason = self:_getPauseScheduler()
+    if rescheduleFn ~= nil then
+        dbg("AutoChecker: paused due to " .. reason)
+        rescheduleFn(function() self:scheduleWithNextWiFi() end)
+        return
+    end
+    dbg("AutoChecker: check now")
+    local _id = self._scheduleId
+    checkNow({
+        silent = true,
+        failed_callback = function()
+            if _id ~= self._scheduleId then return end
+            self.backoff_idx = self.backoff_idx + 1
+            local backoff = math.min(BACKOFF[self.backoff_idx] or DURATION_DAY, self.min_seconds_between_checks)
+            dbg("AutoChecker: backoff retry due to failed fetch attempt [", backoff, "seconds]")
+            self:scheduleIn(time.s(backoff))
+        end,
+    })
+end
+
+function AutoChecker:reschedule()
+    self._scheduleId = self._scheduleId + 1
+    self:schedule()
+end
+
+function AutoChecker:scheduleWithNextWiFi()
+    if self.stopped then return end
+    dbg("AutoChecker: schedule with next WiFi")
+    if not NetworkMgr:isConnected() then self.backoff_idx = 0 end
+    local _id = self._scheduleId
+    NetworkMgr:runWhenConnected(function()
+        if _id ~= self._scheduleId then return end
+        self:checkNow()
+    end)
+end
+
+function AutoChecker:scheduleIn(delay_fts)
+    if self.stopped then return end
+    local delay_s = time.to_s(delay_fts)
+    dbg("AutoChecker: schedule in", delay_s, "seconds")
+    local _id = self._scheduleId
+    UIManager:scheduleIn(delay_s, function()
+        if _id ~= self._scheduleId then return end
+        self:scheduleWithNextWiFi()
+    end)
+end
+
+function AutoChecker:schedule()
+    self.backoff_idx = 0
+    local delay_fts = getAutoCheckThrottleDelayFts(self.min_seconds_between_checks)
+    if delay_fts > 0 then self:scheduleIn(delay_fts) else self:scheduleWithNextWiFi() end
+end
+
+--- Stops the background job started by `enableAutoChecks`.
+local function disableAutoChecks()
+    if not auto_checker then
+        warn("Called disableAutoChecks() but none is running")
+        return false
+    end
+    dbg("AutoChecker: Disable background check")
+    auto_checker:free()
+    auto_checker = nil
+    return true
+end
+
+--- Starts a background job that silently checks for updates whenever connected
+--- to Wi-Fi.
+---
+--- @param args.min_seconds_between_checks number The minimal duration to wait after a successful check before checking again.
+--- @param args.pause_while function Optional function to suspend the background checker. If specified, the function may return `false` to indicate that checks may be run, `true` to indicate to ask again in 60 seconds, or a function that receives a callback to call when to ask again.
+--- @param args.silent_override boolean Don't warn-log if already enabled.
+local function enableAutoChecks(args)
+    if not args then args = {} end
+    local min_seconds_between_checks = args.min_seconds_between_checks or DURATION_WEEK
+    local pause_while = args.pause_while or nil
+
+    if auto_checker ~= nil then
+        if not args.silent_override then
+            warn("Called enableAutoChecks() while another background check is still enabled. Stopping old instance.")
+        end
+        disableAutoChecks()
+    end
+    dbg("AutoChecker: Enable background check each " .. min_seconds_between_checks .. " seconds.")
+    auto_checker = AutoChecker:new {
+        min_seconds_between_checks = min_seconds_between_checks,
+        pause_while = pause_while,
+    }
+    auto_checker:schedule()
+end
+
 return {
+    _settingId = settingId,
+
+    DURATION_SECOND = DURATION_SECOND,
+    DURATION_MINUTE = DURATION_MINUTE,
+    DURATION_HOUR = DURATION_HOUR,
+    DURATION_DAY = DURATION_DAY,
+    DURATION_WEEK = DURATION_WEEK,
+    DURATION_4WEEKS = DURATION_4WEEKS,
+
     checkNow = checkNow,
+    enableAutoChecks = enableAutoChecks,
+    disableAutoChecks = disableAutoChecks,
 }

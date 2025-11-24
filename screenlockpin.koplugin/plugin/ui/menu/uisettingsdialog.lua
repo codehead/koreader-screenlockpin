@@ -3,6 +3,7 @@ local C_ = _.pgettext
 local ConfigDialog = require("ui/widget/configdialog")
 
 local pluginSettings = require("plugin/settings")
+local pluginUpdater = require("plugin/updater")
 
 local UiSettingsDialog = ConfigDialog:extend {
     config_options = {
@@ -100,6 +101,34 @@ local UiSettingsDialog = ConfigDialog:extend {
                     event = "SetScreenshotsMode",
                 },
             },
+        },
+        {
+            icon = "check",
+            options = {
+                {
+                    name = "check_update_interval",
+                    name_text = _("Check for updates"),
+                    toggle = {
+                        C_("Check for updates", "manual"),
+                        C_("Check for updates", "daily"),
+                        C_("Check for updates", "weekly"),
+                        C_("Check for updates", "monthly"),
+                    },
+                    values = {
+                        0,
+                        pluginUpdater.DURATION_DAY,
+                        pluginUpdater.DURATION_WEEK,
+                        pluginUpdater.DURATION_4WEEKS,
+                    },
+                    args = {
+                        0,
+                        pluginUpdater.DURATION_DAY,
+                        pluginUpdater.DURATION_WEEK,
+                        pluginUpdater.DURATION_4WEEKS,
+                    },
+                    event = "SetCheckUpdateInterval",
+                },
+            }
         }
     },
 }
@@ -109,6 +138,7 @@ function UiSettingsDialog:init()
     local uiSettings = pluginSettings.getUiSettings()
     local noteSettings = pluginSettings.getNoteSettings()
     local prevent_screenshots = pluginSettings.getPreventScreenshots()
+    local check_update_interval = pluginSettings.getCheckUpdateInterval()
     self.configurable = {
         ui_scale = uiSettings.scale,
         ui_pos_x = uiSettings.pos_x,
@@ -116,6 +146,7 @@ function UiSettingsDialog:init()
         note_mode = noteSettings.mode,
         note_text = noteSettings.text,
         screenshots_mode = prevent_screenshots and "prevent" or "allow",
+        check_update_interval = check_update_interval,
     }
     ConfigDialog.init(self)
 end
@@ -141,6 +172,20 @@ end
 function UiSettingsDialog:onSetNoteMode(value)
     pluginSettings.setNoteMode(value)
     self.configurable.note_mode = value
+    return true
+end
+
+function UiSettingsDialog:onSetCheckUpdateInterval(value)
+    pluginSettings.setCheckUpdateInterval(value)
+    self.configurable.check_update_interval = value
+    if value > 0 then
+        pluginUpdater.enableAutoChecks({
+            min_seconds_between_checks = value,
+            silent_override = true,
+        })
+    else
+        pluginUpdater.disableAutoChecks()
+    end
     return true
 end
 

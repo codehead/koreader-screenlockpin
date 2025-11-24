@@ -8,6 +8,7 @@ local EventListener = require("ui/widget/eventlistener")
 local ScreenLockPinPublicApi = require("plugin/publicapi")
 local pluginMenu = require("plugin/menu")
 local pluginSettings = require("plugin/settings")
+local pluginUpdater = require("plugin/updater")
 local onBootHook = require("plugin/util/onboothook")
 local screensaverUtil = require("plugin/util/screensaverutil")
 local lockscreenCtrl = require("plugin/ui/ctrl/lockscreenctrl")
@@ -61,6 +62,13 @@ function ScreenLockPinPlugin:init()
 
     self.public_api = ScreenLockPinPublicApi
     PluginShare.screen_lock_pin = self.public
+
+    local check_interval = pluginSettings.getCheckUpdateInterval()
+    if check_interval > 0 then
+        pluginUpdater.enableAutoChecks({ min_seconds_between_checks = check_interval })
+    end
+
+    -- todo performance: register pluginshare.plugin_updater.pauseAllWhile() for efficient pause re-schedule
 end
 
 -- KOReader dispatcher actions (registered in ScreenLockPinPlugin:init)
@@ -103,6 +111,7 @@ function ScreenLockPinPlugin.stopPlugin()
     onBootHook.disable()
     pluginSettings.purge()
     PluginShare.screen_lock_pin = nil
+    pluginUpdater.disableAutoChecks()
     return true
 end
 

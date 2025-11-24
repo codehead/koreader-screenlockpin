@@ -43,7 +43,7 @@ return {
         {
             text = _("Check for updates"),
             keep_menu_open = true,
-            callback = pluginUpdater.checkNow,
+            callback = function() pluginUpdater.checkNow({ silent = false }) end,
             separator = true,
         },
         {
