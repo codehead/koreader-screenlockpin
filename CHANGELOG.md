@@ -12,6 +12,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - [#28](https://github.com/oleasteo/koreader-screenlockpin/issues/28)
   Background job to check for updates automatically (configurable intervals).
 
+### Fixes
+
+- [#32](https://github.com/oleasteo/koreader-screenlockpin/issues/32)
+  Hide screenshot related options on desktop devices.
+- [#30](https://github.com/oleasteo/koreader-screenlockpin/issues/30)
+  Fill backdrop on desktop devices.
+
 ## [2025.11-1] - 2025-11-16
 
 The major addition in this release is the (basic) frontlight control. Just tap
