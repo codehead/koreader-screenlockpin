@@ -114,7 +114,6 @@ function LockScreenFrame:init()
     self.outside_input = OutsideAreaInput:new {
         content_region = nil,
     }
-    self[1] = self.outside_input
     self.panel = FrameContainer:new {
         background = Blitbuffer.COLOR_WHITE,
         -- half-bright gray border plays nice with most wallpapers and mitigates
@@ -127,7 +126,8 @@ function LockScreenFrame:init()
             self.action_row,
         }
     }
-    self[2] = self.panel
+    table.insert(self, self.outside_input)
+    table.insert(self, self.panel)
 end
 
 function LockScreenFrame:setVisible(bool)

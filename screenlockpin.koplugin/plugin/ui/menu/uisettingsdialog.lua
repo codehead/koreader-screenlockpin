@@ -171,7 +171,7 @@ if DEBUG_OPTIONS then
     insertToggle(dismiss_reminder, "15 s", 15)
 end
 
-if Device:isDesktop() and not Device:isEmulator() then
+if Device:isDesktop() then
     -- screenshot prevention doesn't make sense here
     table.remove(triangleOpts, 1)
 end
