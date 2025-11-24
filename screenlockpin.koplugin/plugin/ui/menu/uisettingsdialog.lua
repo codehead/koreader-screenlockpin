@@ -1,9 +1,13 @@
 local _ = require("gettext")
-local C_ = _.pgettext
+local Device = require("device")
 local ConfigDialog = require("ui/widget/configdialog")
+local C_ = _.pgettext
 
 local pluginSettings = require("plugin/settings")
 local pluginUpdater = require("plugin/updater")
+
+local DEBUG_OPTIONS = Device:isEmulator()
+--DEBUG_OPTIONS = true
 
 local UiSettingsDialog = ConfigDialog:extend {
     config_options = {
@@ -150,6 +154,21 @@ local UiSettingsDialog = ConfigDialog:extend {
         },
     },
 }
+
+if DEBUG_OPTIONS then
+    local function insertToggle(config, label, value, pos)
+        if not pos then pos = #config.toggle + 1 end
+        table.insert(config.toggle, pos, label)
+        table.insert(config.values, pos, value)
+        table.insert(config.args, pos, value)
+    end
+
+    local triangleOpts = UiSettingsDialog.config_options[3].options
+    local update_interval = triangleOpts[2]
+    local dismiss_reminder = triangleOpts[3]
+    insertToggle(update_interval, "15 s", 15)
+    insertToggle(dismiss_reminder, "15 s", 15)
+end
 
 function UiSettingsDialog:init()
     self.ui = self
