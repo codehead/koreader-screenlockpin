@@ -155,6 +155,8 @@ local UiSettingsDialog = ConfigDialog:extend {
     },
 }
 
+local triangleOpts = UiSettingsDialog.config_options[3].options
+
 if DEBUG_OPTIONS then
     local function insertToggle(config, label, value, pos)
         if not pos then pos = #config.toggle + 1 end
@@ -163,11 +165,15 @@ if DEBUG_OPTIONS then
         table.insert(config.args, pos, value)
     end
 
-    local triangleOpts = UiSettingsDialog.config_options[3].options
     local update_interval = triangleOpts[2]
     local dismiss_reminder = triangleOpts[3]
     insertToggle(update_interval, "15 s", 15)
     insertToggle(dismiss_reminder, "15 s", 15)
+end
+
+if Device:isDesktop() and not Device:isEmulator() then
+    -- screenshot prevention doesn't make sense here
+    table.remove(triangleOpts, 1)
 end
 
 function UiSettingsDialog:init()
