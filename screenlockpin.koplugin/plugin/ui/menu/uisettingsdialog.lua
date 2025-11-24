@@ -100,11 +100,6 @@ local UiSettingsDialog = ConfigDialog:extend {
                     values = { "prevent", "allow" },
                     event = "SetScreenshotsMode",
                 },
-            },
-        },
-        {
-            icon = "check",
-            options = {
                 {
                     name = "check_update_interval",
                     name_text = _("Check for updates"),
@@ -118,13 +113,13 @@ local UiSettingsDialog = ConfigDialog:extend {
                         0,
                         pluginUpdater.DURATION_DAY,
                         pluginUpdater.DURATION_WEEK,
-                        pluginUpdater.DURATION_4WEEKS,
+                        pluginUpdater.DURATION_DAY * 30,
                     },
                     args = {
                         0,
                         pluginUpdater.DURATION_DAY,
                         pluginUpdater.DURATION_WEEK,
-                        pluginUpdater.DURATION_4WEEKS,
+                        pluginUpdater.DURATION_DAY * 30,
                     },
                     event = "SetCheckUpdateInterval",
                 },
@@ -132,27 +127,27 @@ local UiSettingsDialog = ConfigDialog:extend {
                     name = "update_reminder_interval",
                     name_text = _("Dismissed update reminder"),
                     toggle = {
-                        C_("Check for updates", "never"),
-                        C_("Check for updates", "daily"),
-                        C_("Check for updates", "weekly"),
-                        C_("Check for updates", "monthly"),
+                        C_("Check for updates", "off"),
+                        C_("Check for updates", "1 day"),
+                        C_("Check for updates", "1 week"),
+                        C_("Check for updates", "1 month"),
                     },
                     values = {
                         0,
                         pluginUpdater.DURATION_DAY,
                         pluginUpdater.DURATION_WEEK,
-                        pluginUpdater.DURATION_4WEEKS,
+                        pluginUpdater.DURATION_DAY * 30,
                     },
                     args = {
                         0,
                         pluginUpdater.DURATION_DAY,
                         pluginUpdater.DURATION_WEEK,
-                        pluginUpdater.DURATION_4WEEKS,
+                        pluginUpdater.DURATION_DAY * 30,
                     },
                     event = "SetUpdateReminderInterval",
                 },
-            }
-        }
+            },
+        },
     },
 }
 
