@@ -128,6 +128,29 @@ local UiSettingsDialog = ConfigDialog:extend {
                     },
                     event = "SetCheckUpdateInterval",
                 },
+                {
+                    name = "update_reminder_interval",
+                    name_text = _("Dismissed update reminder"),
+                    toggle = {
+                        C_("Check for updates", "never"),
+                        C_("Check for updates", "daily"),
+                        C_("Check for updates", "weekly"),
+                        C_("Check for updates", "monthly"),
+                    },
+                    values = {
+                        0,
+                        pluginUpdater.DURATION_DAY,
+                        pluginUpdater.DURATION_WEEK,
+                        pluginUpdater.DURATION_4WEEKS,
+                    },
+                    args = {
+                        0,
+                        pluginUpdater.DURATION_DAY,
+                        pluginUpdater.DURATION_WEEK,
+                        pluginUpdater.DURATION_4WEEKS,
+                    },
+                    event = "SetUpdateReminderInterval",
+                },
             }
         }
     },
@@ -138,7 +161,6 @@ function UiSettingsDialog:init()
     local uiSettings = pluginSettings.getUiSettings()
     local noteSettings = pluginSettings.getNoteSettings()
     local prevent_screenshots = pluginSettings.getPreventScreenshots()
-    local check_update_interval = pluginSettings.getCheckUpdateInterval()
     self.configurable = {
         ui_scale = uiSettings.scale,
         ui_pos_x = uiSettings.pos_x,
@@ -146,7 +168,8 @@ function UiSettingsDialog:init()
         note_mode = noteSettings.mode,
         note_text = noteSettings.text,
         screenshots_mode = prevent_screenshots and "prevent" or "allow",
-        check_update_interval = check_update_interval,
+        check_update_interval = pluginSettings.getCheckUpdateInterval(),
+        update_reminder_interval = pluginSettings.getUpdateReminderInterval(),
     }
     ConfigDialog.init(self)
 end
@@ -175,17 +198,30 @@ function UiSettingsDialog:onSetNoteMode(value)
     return true
 end
 
-function UiSettingsDialog:onSetCheckUpdateInterval(value)
-    pluginSettings.setCheckUpdateInterval(value)
-    self.configurable.check_update_interval = value
-    if value > 0 then
+local function refreshPluginUpdater()
+    local check_interval = pluginSettings.getCheckUpdateInterval()
+    if check_interval > 0 then
         pluginUpdater.enableAutoChecks({
-            min_seconds_between_checks = value,
+            min_seconds_between_checks = check_interval,
+            min_seconds_between_remind = pluginSettings.getUpdateReminderInterval(),
             silent_override = true,
         })
     else
         pluginUpdater.disableAutoChecks()
     end
+end
+
+function UiSettingsDialog:onSetCheckUpdateInterval(value)
+    pluginSettings.setCheckUpdateInterval(value)
+    self.configurable.check_update_interval = value
+    refreshPluginUpdater()
+    return true
+end
+
+function UiSettingsDialog:onSetUpdateReminderInterval(value)
+    pluginSettings.setUpdateReminderInterval(value)
+    self.configurable.update_reminder_interval = value
+    refreshPluginUpdater()
     return true
 end
 

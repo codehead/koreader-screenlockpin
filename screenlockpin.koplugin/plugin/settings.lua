@@ -67,6 +67,9 @@ local function mergeDefaultSettings()
     if G_reader_settings:hasNot("screenlockpin_check_updates_interval") then
         G_reader_settings:saveSetting("screenlockpin_check_updates_interval", pluginUpdater.DURATION_WEEK)
     end
+    if G_reader_settings:hasNot("screenlockpin_update_reminder_interval") then
+        G_reader_settings:saveSetting("screenlockpin_update_reminder_interval", pluginUpdater.DURATION_DAY)
+    end
     if G_reader_settings:hasNot("screenlockpin_prevent_screenshots") then
         G_reader_settings:saveSetting("screenlockpin_prevent_screenshots", true)
     end
@@ -159,6 +162,14 @@ end
 
 local function setCheckUpdateInterval(seconds)
     G_reader_settings:saveSetting("screenlockpin_check_updates_interval", seconds)
+end
+
+local function getUpdateReminderInterval()
+    return G_reader_settings:readSetting("screenlockpin_update_reminder_interval")
+end
+
+local function setUpdateReminderInterval(seconds)
+    G_reader_settings:saveSetting("screenlockpin_update_reminder_interval", seconds)
 end
 
 --
@@ -289,6 +300,7 @@ local function purge()
     G_reader_settings:delSetting("screenlockpin_note_mode")
     G_reader_settings:delSetting("screenlockpin_note_text")
     G_reader_settings:delSetting("screenlockpin_check_updates_interval")
+    G_reader_settings:delSetting("screenlockpin_update_reminder_interval")
 end
 
 return {
@@ -309,6 +321,8 @@ return {
 
     getCheckUpdateInterval = getCheckUpdateInterval,
     setCheckUpdateInterval = setCheckUpdateInterval,
+    getUpdateReminderInterval = getUpdateReminderInterval,
+    setUpdateReminderInterval = setUpdateReminderInterval,
 
     getPreventScreenshots = getPreventScreenshots,
     setPreventScreenshots = setPreventScreenshots,

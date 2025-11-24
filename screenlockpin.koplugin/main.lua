@@ -2,6 +2,7 @@ local _ = require("gettext")
 local logger = require("logger")
 local Dispatcher = require("dispatcher")
 local PluginShare = require("pluginshare")
+local UIManager = require("ui/uimanager")
 local Notification = require("ui/widget/notification")
 local EventListener = require("ui/widget/eventlistener")
 
@@ -63,10 +64,15 @@ function ScreenLockPinPlugin:init()
     self.public_api = ScreenLockPinPublicApi
     PluginShare.screen_lock_pin = self.public
 
-    local check_interval = pluginSettings.getCheckUpdateInterval()
-    if check_interval > 0 then
-        pluginUpdater.enableAutoChecks({ min_seconds_between_checks = check_interval })
-    end
+    UIManager:nextTick(function()
+        local check_interval = pluginSettings.getCheckUpdateInterval()
+        if check_interval > 0 then
+            pluginUpdater.enableAutoChecks({
+                min_seconds_between_checks = check_interval,
+                min_seconds_between_remind = pluginSettings.getUpdateReminderInterval(),
+            })
+        end
+    end)
 
     -- todo performance: register pluginshare.plugin_updater.pauseAllWhile() for efficient pause re-schedule
 end

@@ -93,6 +93,7 @@ end
 local meta = dofile(getPluginDir() .. "/_meta.lua")
 local settingId = "plugin_updater#" .. meta.name
 local publicApi
+local busy = false
 
 if not PluginShare.plugin_updater then
     -- Reminder: This public API should stay backward compatible; extend, don't break.
@@ -217,19 +218,26 @@ local function downloadUpdate(plugin_dir, remote)
 end
 
 local function _async_update_step(text, ...)
+    busy = true
     local run_fns = table.pack(...)
-    local step_concluded = function() end
+    local step_concluded = function() busy = false end
     if text ~= nil then
         local status_widget = InfoMessage:new { text = _(text), dismissable = false }
         UIManager:show(status_widget, "ui")
-        step_concluded = function() UIManager:close(status_widget, "ui") end
+        step_concluded = function()
+            UIManager:close(status_widget, "ui")
+            busy = false
+        end
     end
     UIManager:nextTick(function()
         for _, run in ipairs(run_fns) do run(step_concluded) end
     end)
 end
 
-local function perform_update(remote)
+local function perform_update(args)
+    local remote = args.remote
+    local callback = args.callback
+
     _async_update_step("Preparing for update…", function(step_concluded)
         local plugin_dir = getPluginDir()
         if not plugin_dir then
@@ -238,6 +246,7 @@ local function perform_update(remote)
             UIManager:show(InfoMessage:new {
                 text = _("Failed to detect plugin root.\nCannot perform update automatically."),
             })
+            callback({ success = false, temporary_issue = false })
             return
         end
         local backup_dir = plugin_dir .. ".backup"
@@ -248,6 +257,7 @@ local function perform_update(remote)
             UIManager:show(InfoMessage:new {
                 text = _("Path already exists: " .. backup_dir .. "\nMaybe an incomplete update beforehand?\nPlease resolve situation by hand."),
             })
+            callback({ success = false, temporary_issue = false, intervention_required = true })
             return
         end
 
@@ -259,6 +269,7 @@ local function perform_update(remote)
                 UIManager:show(InfoMessage:new {
                     text = _("Failed to download update file.\nPlease check connection and try again."),
                 })
+                callback({ success = false, temporary_issue = true })
                 return
             end
 
@@ -271,6 +282,7 @@ local function perform_update(remote)
                     UIManager:show(InfoMessage:new {
                         text = _("Failed to move the old plugin directory.\nCannot perform update automatically."),
                     })
+                    callback({ success = false, temporary_issue = false, intervention_required = true })
                     return
                 end
                 lfs.mkdir(plugin_dir)
@@ -296,6 +308,7 @@ local function perform_update(remote)
                             text = text .. "\n\n" .. _("Failed to clean up intermediate plugins/ directories.\nPlease resolve situation by hand.")
                         end
                         UIManager:show(InfoMessage:new { text = text })
+                        callback({ success = false, temporary_issue = false, intervention_required = true })
                     end)
                     return
                 end
@@ -309,6 +322,7 @@ local function perform_update(remote)
                             text = T(_("Failed to verify the patched update.\n\nPlease check plugins/ directory and resolve situation by hand."),
                                     err or "reason unknown"),
                         })
+                        callback({ success = false, temporary_issue = false, intervention_required = true })
                         return
                     end
                     local new_meta = dofile(plugin_dir .. "/_meta.lua")
@@ -319,6 +333,7 @@ local function perform_update(remote)
                             text = T(_("Failed to verify the patched update (wrong version in _meta.lua).\n\nPlease check plugins/ directory and resolve situation by hand."),
                                     err or "reason unknown"),
                         })
+                        callback({ success = false, temporary_issue = false, intervention_required = true })
                         return
                     end
                     meta = new_meta
@@ -333,6 +348,7 @@ local function perform_update(remote)
                                 text = T(_("Failed to perform cleanup operation after patching the update:\n%1\n\nPlease check plugins/ directory and remove the '.backup' directory and zip file by hand."),
                                         err or "reason unknown"),
                             })
+                            callback({ success = false, temporary_issue = false, intervention_required = true })
                             return
                         end
                         dbg("[cleanup] Removing plugin update archive", update_file)
@@ -344,11 +360,13 @@ local function perform_update(remote)
                                 text = T(_("Failed to perform cleanup operation after patching the update:\n%1\n\nPlease check plugins/ directory and remove the zip file by hand."),
                                         err or "reason unknown"),
                             })
+                            callback({ success = false, temporary_issue = false, intervention_required = true })
                             return
                         end
 
                         step_concluded()
                         UIManager:askForRestart("Plugin updated successfully. To use the new version, the device must be restarted.")
+                        callback({ success = true })
                     end)
                 end)
             end)
@@ -377,14 +395,16 @@ end
 
 --- Checks for updates.
 ---
---- @param args.silent boolean If true, don't show any notifications during the check for updates. E.g., use this for background checks.
---- @param args.failed_callback function Called with error string after an unsuccessful check (e.g., connection failed).
---- @param args.checked_callback function Called after a successful check. The passed boolean indicates if an update is available.
+--- @param args.silent nil | boolean If true, don't show any notifications during the check for updates. E.g., use this for background checks.
+--- @param args.failed_callback nil | function Called with error string after an unsuccessful check (e.g., connection failed).
+--- @param args.checked_callback nil | function Called after a successful check.
+--- @param args.update_callback nil | function Called after an update attempt.
 local function checkNow(args)
     if not args then args = {} end
     local silent = args.silent or false
     local failed_callback = args.failed_callback or function() end
     local checked_callback = args.checked_callback or function() end
+    local update_callback = args.update_callback or function() end
 
     if not NetworkMgr:isWifiOn() then
         dbg("No wi-fi")
@@ -424,14 +444,14 @@ local function checkNow(args)
                 end
                 markCheckedAt()
                 if auto_checker then auto_checker:reschedule() end
-                checked_callback(false)
+                checked_callback({ update_available = false, update_triggered = false })
                 return
             end
             dbg("Version mismatch; assuming update available. Remote:", remote.version, "Local:", meta.version)
         end
         step_concluded()
+        busy = true
         markCheckedAt()
-        checked_callback(true)
         UIManager:show(InfoMessage:new {
             show_icon = false,
             text = _("Plugin update available: ") .. remote.version .. "\n" .. remote.name .. "\n\n" .. remote.description,
@@ -439,14 +459,22 @@ local function checkNow(args)
                 UIManager:show(ConfirmBox:new{
                     text = T(_("Update to %1 v%2 now?"), meta.fullname, remote.version),
                     ok_text = _("Update"),
+                    dismissable = false,
+                    cancel_callback = function()
+                        busy = false
+                        checked_callback({ update_available = true, update_triggered = false })
+                    end,
                     ok_callback = function()
+                        checked_callback({ update_available = true, update_triggered = true })
                         if Device.isEmulator() then
                             UIManager:show(InfoMessage:new {
                                 text = _("Emulator detected.\nWe don't patch updates in emulator to spare you from nuking local code changes.\nIf you need to test the updater, use desktop KOReader instead."),
                             })
+                            busy = false
+                            update_callback({ success = false, temporary_issue = false, intervention_required = true })
                             return
                         end
-                        perform_update(remote)
+                        perform_update({ remote = remote, callback = update_callback })
                     end,
                 })
             end
@@ -471,6 +499,7 @@ local BACKOFF = {
 
 local AutoChecker = EventListener:extend {
     min_seconds_between_checks = DURATION_WEEK,
+    min_seconds_between_remind = DURATION_DAY,
     pause_while = nil,
     stopped = false,
     backoff_idx = 0,
@@ -504,7 +533,15 @@ function AutoChecker:_getPauseScheduler()
     end
     if Device.screen_saver_mode then return scheduleInOneMinute, "screensaver mode" end
     if Device.screen_saver_lock then return scheduleInOneMinute, "screensaver lock" end
+    if busy then return scheduleInOneMinute, "updater is busy" end
     return nil
+end
+
+function AutoChecker:doBackOff(reason)
+    self.backoff_idx = self.backoff_idx + 1
+    local backoff = math.min(BACKOFF[self.backoff_idx] or DURATION_DAY, self.min_seconds_between_checks)
+    dbg("AutoChecker: backoff retry due to " .. reason .. " [", backoff, "seconds]")
+    self:scheduleIn(time.s(backoff))
 end
 
 function AutoChecker:checkNow()
@@ -521,10 +558,34 @@ function AutoChecker:checkNow()
         silent = true,
         failed_callback = function()
             if _id ~= self._scheduleId then return end
-            self.backoff_idx = self.backoff_idx + 1
-            local backoff = math.min(BACKOFF[self.backoff_idx] or DURATION_DAY, self.min_seconds_between_checks)
-            dbg("AutoChecker: backoff retry due to failed fetch attempt [", backoff, "seconds]")
-            self:scheduleIn(time.s(backoff))
+            self:doBackOff("failed fetch attempt")
+        end,
+        checked_callback = function(state)
+            if not state.update_available then
+                -- the re-schedule is already triggered by checkNow, as it
+                -- always re-schedules the AutoChecker singleton
+                return
+            end
+            if not state.update_triggered then
+                if self.min_seconds_between_remind > 0 then
+                    dbg("AutoChecker: Update was dismissed. Scheduling a reminder…")
+                    self:scheduleIn(time.s(self.min_seconds_between_remind))
+                else
+                    dbg("AutoChecker: Update was dismissed. Reminders are disabled.")
+                end
+                return
+            end
+        end,
+        update_callback = function(state)
+            if not state.success and state.temporary_issue then
+                if self.min_seconds_between_remind > 0 then
+                    dbg("AutoChecker: Update failed due to temporary issue. Scheduling a reminder to try again…")
+                    self:scheduleIn(time.s(self.min_seconds_between_remind))
+                else
+                    dbg("AutoChecker: Update failed tue to temporary issue. Reminders are disabled.")
+                end
+                return
+            end
         end,
     })
 end
@@ -577,12 +638,14 @@ end
 --- Starts a background job that silently checks for updates whenever connected
 --- to Wi-Fi.
 ---
---- @param args.min_seconds_between_checks number The minimal duration to wait after a successful check before checking again.
---- @param args.pause_while function Optional function to suspend the background checker. If specified, the function may return `false` to indicate that checks may be run, `true` to indicate to ask again in 60 seconds, or a function that receives a callback to call when to ask again.
---- @param args.silent_override boolean Don't warn-log if already enabled.
+--- @param args.min_seconds_between_checks nil | number The minimal duration to wait after a successful check before checking again.
+--- @param args.min_seconds_between_remind number The minimal duration to wait after a dismissed update to remind again. Set to 0 to disable reminders.
+--- @param args.pause_while nil | function Optional function to suspend the background checker. If specified, the function may return `false` to indicate that checks may be run, `true` to indicate to ask again in 60 seconds, or a function that receives a callback to call when to ask again.
+--- @param args.silent_override nil | boolean Don't warn-log if already enabled.
 local function enableAutoChecks(args)
     if not args then args = {} end
     local min_seconds_between_checks = args.min_seconds_between_checks or DURATION_WEEK
+    local min_seconds_between_remind = args.min_seconds_between_remind
     local pause_while = args.pause_while or nil
 
     if auto_checker ~= nil then
@@ -594,6 +657,7 @@ local function enableAutoChecks(args)
     dbg("AutoChecker: Enable background check each " .. min_seconds_between_checks .. " seconds.")
     auto_checker = AutoChecker:new {
         min_seconds_between_checks = min_seconds_between_checks,
+        min_seconds_between_remind = min_seconds_between_remind,
         pause_while = pause_while,
     }
     auto_checker:schedule()
