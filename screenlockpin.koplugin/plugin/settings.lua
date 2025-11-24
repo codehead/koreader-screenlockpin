@@ -1,5 +1,6 @@
 local logger = require("logger")
 
+local pluginUpdater = require("plugin/updater")
 --
 -- Init
 --
@@ -62,6 +63,12 @@ local function mergeDefaultSettings()
     end
     if G_reader_settings:hasNot("screenlockpin_note_text") then
         G_reader_settings:saveSetting("screenlockpin_note_text", "")
+    end
+    if G_reader_settings:hasNot("screenlockpin_check_updates_interval") then
+        G_reader_settings:saveSetting("screenlockpin_check_updates_interval", pluginUpdater.DURATION_WEEK)
+    end
+    if G_reader_settings:hasNot("screenlockpin_update_reminder_interval") then
+        G_reader_settings:saveSetting("screenlockpin_update_reminder_interval", pluginUpdater.DURATION_DAY)
     end
     if G_reader_settings:hasNot("screenlockpin_prevent_screenshots") then
         G_reader_settings:saveSetting("screenlockpin_prevent_screenshots", true)
@@ -143,6 +150,26 @@ end
 
 local function setNoteText(text)
     G_reader_settings:saveSetting("screenlockpin_note_text", text)
+end
+
+--
+-- Check for updates
+--
+
+local function getCheckUpdateInterval()
+    return G_reader_settings:readSetting("screenlockpin_check_updates_interval")
+end
+
+local function setCheckUpdateInterval(seconds)
+    G_reader_settings:saveSetting("screenlockpin_check_updates_interval", seconds)
+end
+
+local function getUpdateReminderInterval()
+    return G_reader_settings:readSetting("screenlockpin_update_reminder_interval")
+end
+
+local function setUpdateReminderInterval(seconds)
+    G_reader_settings:saveSetting("screenlockpin_update_reminder_interval", seconds)
 end
 
 --
@@ -272,6 +299,8 @@ local function purge()
     G_reader_settings:delSetting("screenlockpin_restore_screensaver_delay")
     G_reader_settings:delSetting("screenlockpin_note_mode")
     G_reader_settings:delSetting("screenlockpin_note_text")
+    G_reader_settings:delSetting("screenlockpin_check_updates_interval")
+    G_reader_settings:delSetting("screenlockpin_update_reminder_interval")
 end
 
 return {
@@ -289,6 +318,11 @@ return {
     getNoteSettings = getNoteSettings,
     setNoteMode = setNoteMode,
     setNoteText = setNoteText,
+
+    getCheckUpdateInterval = getCheckUpdateInterval,
+    setCheckUpdateInterval = setCheckUpdateInterval,
+    getUpdateReminderInterval = getUpdateReminderInterval,
+    setUpdateReminderInterval = setUpdateReminderInterval,
 
     getPreventScreenshots = getPreventScreenshots,
     setPreventScreenshots = setPreventScreenshots,

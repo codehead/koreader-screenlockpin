@@ -1,6 +1,7 @@
 local _ = require("gettext")
 
 local pluginSettings = require("plugin/settings")
+local pluginUpdater = require("plugin/updater")
 local settingsCtrl = require("plugin/ui/ctrl/settingsctrl")
 
 local function options_enabled()
@@ -38,6 +39,11 @@ return {
             text = _("Lock screen options"),
             enabled_func = options_enabled,
             callback = settingsCtrl.showUiSettingsDialog,
+        },
+        {
+            text = _("Check for updates"),
+            keep_menu_open = true,
+            callback = function() pluginUpdater.checkNow({ silent = false }) end,
             separator = true,
         },
         {

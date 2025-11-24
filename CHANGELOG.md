@@ -3,7 +3,14 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-[//]: # (## [Unreleased])
+## [Unreleased]
+
+### Added
+
+- [#15](https://github.com/oleasteo/koreader-screenlockpin/issues/15)
+  Check for updates menu item with automatic plugin update procedure.
+- [#28](https://github.com/oleasteo/koreader-screenlockpin/issues/28)
+  Background job to check for updates automatically (configurable intervals).
 
 ## [2025.11-1] - 2025-11-16
 
