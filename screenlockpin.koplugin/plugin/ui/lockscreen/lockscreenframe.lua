@@ -137,7 +137,7 @@ end
 function LockScreenFrame:paintTo(bb, x, y)
     if not self.visible then return end
     if Device:isDesktop() then
-        bb:paintRect(x, y, Screen:getWidth(), Screen:getHeight(), Blitbuffer.COLOR_GRAY_2)
+        bb:paintRect(x, y, Screen:getWidth(), Screen:getHeight(), Blitbuffer.COLOR_GRAY_E)
     end
     local region = self:getContentRegion()
     self.panel:paintTo(bb, x + region.x, y + region.y)
