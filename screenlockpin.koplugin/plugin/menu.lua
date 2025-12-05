@@ -2,7 +2,7 @@ local _ = require("gettext")
 local Device = require("device")
 
 local pluginSettings = require("plugin/settings")
-local pluginUpdater = require("plugin/updater")
+local PluginUpdateMgr = require("plugin/updatemanager")
 local settingsCtrl = require("plugin/ui/ctrl/settingsctrl")
 
 local function options_enabled()
@@ -44,7 +44,7 @@ local menu = {
         {
             text = _("Check for updates"),
             keep_menu_open = true,
-            callback = function() pluginUpdater.checkNow({ silent = false }) end,
+            callback = function() PluginUpdateMgr.instance:checkNow({ silent = false }) end,
             separator = true,
         },
         {

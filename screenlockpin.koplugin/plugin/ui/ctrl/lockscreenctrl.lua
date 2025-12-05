@@ -2,6 +2,7 @@ local _ = require("gettext")
 local logger = require("logger")
 local Device = require("device")
 local ffiutil = require("ffi/util")
+local PluginShare = require("pluginshare")
 local UIManager = require("ui/uimanager")
 local Screensaver = require("ui/screensaver")
 local InfoMessage = require("ui/widget/infomessage")
@@ -69,6 +70,7 @@ local function unlockScreen(cause)
         pluginSettings.putPersistentCache("throttled_times", 0)
         pluginSettings.putPersistentCache("attempts_by_length", nil)
     end
+    UIManager:nextTick(PluginShare.plugin_updater_v1.ping)
     return true
 end
 

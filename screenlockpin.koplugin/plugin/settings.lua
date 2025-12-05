@@ -1,6 +1,7 @@
 local logger = require("logger")
 
-local pluginUpdater = require("plugin/updater")
+local PluginUpdateMgr = require("plugin/updatemanager")
+
 --
 -- Init
 --
@@ -65,10 +66,10 @@ local function mergeDefaultSettings()
         G_reader_settings:saveSetting("screenlockpin_note_text", "")
     end
     if G_reader_settings:hasNot("screenlockpin_check_updates_interval") then
-        G_reader_settings:saveSetting("screenlockpin_check_updates_interval", pluginUpdater.DURATION_WEEK)
+        G_reader_settings:saveSetting("screenlockpin_check_updates_interval", 3600 * 24 * 30)
     end
     if G_reader_settings:hasNot("screenlockpin_update_reminder_interval") then
-        G_reader_settings:saveSetting("screenlockpin_update_reminder_interval", pluginUpdater.DURATION_DAY)
+        G_reader_settings:saveSetting("screenlockpin_update_reminder_interval", 3600 * 24)
     end
     if G_reader_settings:hasNot("screenlockpin_prevent_screenshots") then
         G_reader_settings:saveSetting("screenlockpin_prevent_screenshots", true)
@@ -162,6 +163,10 @@ end
 
 local function setCheckUpdateInterval(seconds)
     G_reader_settings:saveSetting("screenlockpin_check_updates_interval", seconds)
+    if PluginUpdateMgr.instance then
+        PluginUpdateMgr.instance.between_checks = seconds
+        PluginUpdateMgr.instance:ping()
+    end
 end
 
 local function getUpdateReminderInterval()
@@ -170,6 +175,10 @@ end
 
 local function setUpdateReminderInterval(seconds)
     G_reader_settings:saveSetting("screenlockpin_update_reminder_interval", seconds)
+    if PluginUpdateMgr.instance then
+        PluginUpdateMgr.instance.between_remind = seconds
+        PluginUpdateMgr.instance:ping()
+    end
 end
 
 --

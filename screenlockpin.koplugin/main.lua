@@ -2,14 +2,13 @@ local _ = require("gettext")
 local logger = require("logger")
 local Dispatcher = require("dispatcher")
 local PluginShare = require("pluginshare")
-local UIManager = require("ui/uimanager")
 local Notification = require("ui/widget/notification")
 local EventListener = require("ui/widget/eventlistener")
 
 local ScreenLockPinPublicApi = require("plugin/publicapi")
 local pluginMenu = require("plugin/menu")
 local pluginSettings = require("plugin/settings")
-local pluginUpdater = require("plugin/updater")
+local PluginUpdateMgr = require("plugin/updatemanager")
 local onBootHook = require("plugin/util/onboothook")
 local screensaverUtil = require("plugin/util/screensaverutil")
 local lockscreenCtrl = require("plugin/ui/ctrl/lockscreenctrl")
@@ -64,17 +63,15 @@ function ScreenLockPinPlugin:init()
     self.public_api = ScreenLockPinPublicApi
     PluginShare.screen_lock_pin = self.public
 
-    UIManager:nextTick(function()
-        local check_interval = pluginSettings.getCheckUpdateInterval()
-        if check_interval > 0 then
-            pluginUpdater.enableAutoChecks({
-                min_seconds_between_checks = check_interval,
-                min_seconds_between_remind = pluginSettings.getUpdateReminderInterval(),
-            })
-        end
+    PluginShare.plugin_updater_v1.registerPause(function ()
+        if lockscreenCtrl.isActive() then return "ScreenLockPin:LockScreen" end
+        return false
     end)
 
-    -- todo performance: register pluginshare.plugin_updater.pauseAllWhile() for efficient pause re-schedule
+    PluginUpdateMgr.instance = PluginUpdateMgr:new {
+        between_checks = pluginSettings.getCheckUpdateInterval(),
+        between_remind = pluginSettings.getUpdateReminderInterval(),
+    }
 end
 
 -- KOReader dispatcher actions (registered in ScreenLockPinPlugin:init)
@@ -117,15 +114,18 @@ function ScreenLockPinPlugin.stopPlugin()
     onBootHook.disable()
     pluginSettings.purge()
     PluginShare.screen_lock_pin = nil
-    pluginUpdater.disableAutoChecks()
+    PluginUpdateMgr.instance:free()
+    PluginUpdateMgr.instance = nil
     return true
 end
 
 -- KOReader plugin hook (on wakeup after suspend)
 
 function ScreenLockPinPlugin.onResume()
-    if not pluginSettings.getEnabled() then return end
-    if not pluginSettings.shouldLockOnWakeup() then return end
+    if not pluginSettings.getEnabled() or not pluginSettings.shouldLockOnWakeup() then
+        PluginUpdateMgr.instance:ping()
+        return
+    end
     -- we hijacked the screensaver_delay (property of ui/screensaver.lua)
     -- any unknown values will be interpreted as "tap to exit from screensaver"
     -- this enables us to create a lock screen first before closing the
@@ -136,8 +136,10 @@ end
 -- Monkey-patched hook (registered via onBootHook)
 
 function ScreenLockPinPlugin.onBoot()
-    if not pluginSettings.getEnabled() then return end
-    if not pluginSettings.shouldLockOnBoot() then return end
+    if not pluginSettings.getEnabled() or not pluginSettings.shouldLockOnBoot() then
+        PluginUpdateMgr.instance:ping()
+        return
+    end
     logger.dbg("ScreenLockPin: lock on boot")
     screensaverUtil.showWhileAwake("lockonboot")
     lockscreenCtrl.showOrClearLockScreen("boot")

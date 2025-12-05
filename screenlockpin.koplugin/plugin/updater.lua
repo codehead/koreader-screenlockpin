@@ -21,10 +21,8 @@
 -- SOFTWARE.
 
 local _ = require("gettext")
-local BD = require("ui/bidi")
 local lfs = require("libs/libkoreader-lfs")
 local logger = require("logger")
-local time = require("ui/time")
 local http = require("socket.http")
 local util = require("util")
 local JSON = require("json")
@@ -36,149 +34,68 @@ local socketutil = require("socketutil")
 local UIManager = require("ui/uimanager")
 local NetworkMgr = require("ui/network/manager")
 local ConfirmBox = require("ui/widget/confirmbox")
-local PluginShare = require("pluginshare")
 local InfoMessage = require("ui/widget/infomessage")
 local Notification = require("ui/widget/notification")
 local EventListener = require("ui/widget/eventlistener")
 local T = ffiUtil.template
 
---[[
+--region Utilities
 
-Feel free to copy & adapt this updater for your plugin. If you're using
-GitHub releases, all you need to do is specify a `name`, `fullname`,
-`update_url`, and `version` in your _meta.lua file.
-
-Technically, we just expect the `update_url` API to respond with JSON that
-satisfies
-  {
-    name: string,
-    tag_name: string,
-    assets?: { content_type: string, browser_download_url: string }[],
-    zipball_url: string,
-    body: string
-  }
-
-The `tag_name` must match the _meta.lua#version field, but may have a leading
-"v" as to common git practice.
-
-If any asset has `content_type == "application/zip"` (e.g., custom zip file
-attached to the GitHub release), its `browser_download_url` is used as update
-file. If no asset matches this content type, we default to `zipball_url`
-(source code zip file of GitHub releases).
-
-We expose a public API as `PluginShare.plugin_updater`.
-Use it to control (all) instances of the updater from different plugins.
-
-You should not need to change any of the code below.
-
---]]
-
--- just a hint for plugin authors to recognize the need to update this file
-local UPDATER_VERSION = 1 -- 2025-11
-
---- if true (uncomment line below), we still propose update if latest version
---- matches the installed version
-local DEBUG_FORCE_UPDATE = false
---DEBUG_FORCE_UPDATE = true
+-- plugin meta
 
 local function getPluginDir()
     return debug.getinfo(1, "S").source:match("@(.+%.koplugin)/")
 end
 
-local function moveFile(src, dest)
-    local mv_bin = Device:isAndroid() and "/system/bin/mv" or "/bin/mv"
-    return ffiUtil.execute(mv_bin, src, dest) == 0
-end
-
 local meta = dofile(getPluginDir() .. "/_meta.lua")
-local settingId = "plugin_updater#" .. meta.name
-local publicApi
-local busy = false
 
-if not PluginShare.plugin_updater then
-    -- Reminder: This public API should stay backward compatible; extend, don't break.
-    PluginShare.plugin_updater = EventListener:extend {
-        _pause_checks = {},
-        modules = {},
-        --- Registers a global handler suppress checking for updates in the
-        --- background. This is intended for things like lock screens, etc.
-        --- @param predicate function Should return `false` to indicate that checks may be run, `true` to indicate to ask again in 60 seconds, or a function that receives a callback to call when to ask again.
-        pauseAllWhile = function(predicate)
-            table.insert(PluginShare.plugin_updater._pause_checks, predicate)
-        end,
-    }
-end
-publicApi = PluginShare.plugin_updater
-publicApi.modules[meta.name] = {
-    version = meta.version,
-    settingId = settingId,
-    updater_version = UPDATER_VERSION,
-}
-
-local auto_checker
+-- logging
 
 local function dbg(...)
     logger.dbg("[" .. meta.name .. ":updater]", ...)
 end
+
 local function warn(...)
     logger.warn("[" .. meta.name .. ":updater]", ...)
 end
 
-local function fetchRemoteMeta()
-    local sink = {}
-    socketutil:set_timeout()
-    local request = {
-        url     = meta.update_url,
-        method  = "GET",
-        sink    = ltn12.sink.table(sink),
-    }
-    dbg("Fetching meta information on latest update", request.url)
-    local code, headers, status = socket.skip(1, http.request(request))
-    socketutil:reset_timeout()
-    -- check network error
-    if headers == nil then
-        warn("Network unreachable", status or code or "unknown")
-        return false
-    end
-    -- check HTTP error
-    if code ~= 200 then
-        warn("HTTP status unexpected:", status or code or "unknown")
-        dbg("HTTP response headers:", headers)
-        return false
-    end
-    -- quick check content JSON format
-    local content = table.concat(sink)
-    if content == "" or content:sub(1, 1) ~= "{" then
-        warn("Expected plugin meta JSON response, got", content)
-        return false
-    end
-    -- parse JSON
-    local ok, data = pcall(JSON.decode, content, JSON.decode.simple)
-    if not ok or not data then
-        warn("Failed to parse plugin meta JSON", data)
-        return false
-    end
-    -- parse version
-    local remote_version = data.tag_name
-    if remote_version:sub(1, 1) == "v" then remote_version = remote_version:sub(2) end
-    -- find zip asset
-    local remote_zip_asset
-    for _, asset in ipairs(data.assets or {}) do
-        if asset.content_type == "application/zip" then
-            remote_zip_asset = asset
-            break
-        end
-    end
-    local remote_zip_url = remote_zip_asset and remote_zip_asset.browser_download_url or data.zipball_url
-    local remote_description = data.body or ""
-    dbg("Parsed plugin meta successfully:", string.format("name = %s | version = %s | zip_url = %s", data.name, remote_version, remote_zip_url))
-    return true, {
-        name = data.name,
-        version = remote_version,
-        description = remote_description,
-        zip_url = remote_zip_url,
-    }
+local function err(...)
+    logger.err("[" .. meta.name .. ":updater]", ...)
 end
+
+-- coroutines
+
+local function runAsync(task)
+    local co = coroutine.create(task)
+    local function cont(...)
+        local ok, stepFn = coroutine.resume(co, ...)
+        if not ok then return err(stepFn) end
+        if coroutine.status(co) == "dead" then return end
+        stepFn(cont)
+    end
+    cont()
+end
+
+local function asyncStep(step, text)
+    local done = function() end
+    if text ~= nil then
+        local status_widget = InfoMessage:new { text = _(text), dismissable = false }
+        UIManager:show(status_widget, "ui")
+        done = function() UIManager:close(status_widget, "ui") end
+    end
+    dbg("step:start", text)
+    coroutine.yield(function (cb) UIManager:nextTick(cb) end)
+    local val = coroutine.yield(step, nil)
+    done()
+    dbg("step:concluded", text, val)
+    return val
+end
+
+local function syncStep(step, text)
+    return asyncStep(function(cb) cb(step()) end, text)
+end
+
+-- http
 
 local function downloadFile(local_path, remote_url)
     dbg("Downloading update file from", remote_url, "; saving as", local_path)
@@ -192,488 +109,357 @@ local function downloadFile(local_path, remote_url)
         util.removeFile(local_path)
         dbg("Download failed:", status or code)
         dbg("HTTP response headers:", headers)
-        UIManager:show(InfoMessage:new {
-            text = T(_("Could not save file to:\n%1\n%2"),
-                    BD.filepath(local_path),
-                    status or code or "network unreachable"),
-        })
-        return false
+        local error = status or code or "network unreachable"
+        return nil, error
     end
     dbg("Plugin update file download succeeded:", local_path)
-    return true
+    return local_path
 end
 
-local function downloadUpdate(plugin_dir, remote)
-    local local_target = plugin_dir .. "_" .. remote.version .. ".zip"
-    if lfs.attributes(local_target) ~= nil then
-        warn("Update file already present in file system. Re-using it to avoid re-download.")
-        Notification:notify(_("Update file found. Skipping download."), Notification.SOURCE_DISPATCHER)
-        return local_target
-    end
-    if downloadFile(local_target, remote.zip_url) then
-        return local_target
-    else
+local function fetchJson(request)
+    local sink = {}
+    request.sink = ltn12.sink.table(sink)
+    socketutil:set_timeout()
+    dbg("Fetching JSON", request.url)
+    local code, headers, status = socket.skip(1, http.request(request))
+    socketutil:reset_timeout()
+    -- check network error
+    if headers == nil then
+        warn("Network unreachable", status or code or "unknown")
         return nil
     end
-end
-
-local function _async_update_step(text, ...)
-    busy = true
-    local run_fns = table.pack(...)
-    local step_concluded = function() busy = false end
-    if text ~= nil then
-        local status_widget = InfoMessage:new { text = _(text), dismissable = false }
-        UIManager:show(status_widget, "ui")
-        step_concluded = function()
-            UIManager:close(status_widget, "ui")
-            busy = false
-        end
+    -- check HTTP error
+    if code ~= 200 then
+        warn("HTTP status unexpected:", status or code or "unknown")
+        dbg("HTTP response headers:", headers)
+        return nil
     end
-    UIManager:nextTick(function()
-        for _, run in ipairs(run_fns) do run(step_concluded) end
-    end)
-end
-
-local function perform_update(args)
-    local remote = args.remote
-    local callback = args.callback
-
-    _async_update_step("Preparing for update…", function(step_concluded)
-        local plugin_dir = getPluginDir()
-        if not plugin_dir then
-            step_concluded()
-            warn("Failed to detect plugin root")
-            UIManager:show(InfoMessage:new {
-                text = _("Failed to detect plugin root.\nCannot perform update automatically."),
-            })
-            callback({ success = false, temporary_issue = false })
-            return
-        end
-        local backup_dir = plugin_dir .. ".backup"
-        dbg("Detected plugin dir", plugin_dir)
-        if lfs.attributes(backup_dir) ~= nil then
-            step_concluded()
-            warn("Path already exists: " .. backup_dir)
-            UIManager:show(InfoMessage:new {
-                text = _("Path already exists: " .. backup_dir .. "\nMaybe an incomplete update beforehand?\nPlease resolve situation by hand."),
-            })
-            callback({ success = false, temporary_issue = false, intervention_required = true })
-            return
-        end
-
-        _async_update_step("Downloading…", step_concluded, function(step_concluded)
-            local update_file = downloadUpdate(plugin_dir, remote)
-            if not update_file then
-                step_concluded()
-                warn("Failed to download update file")
-                UIManager:show(InfoMessage:new {
-                    text = _("Failed to download update file.\nPlease check connection and try again."),
-                })
-                callback({ success = false, temporary_issue = true })
-                return
-            end
-
-            _async_update_step("Applying update…", step_concluded, function(step_concluded)
-                dbg("Moving " .. plugin_dir .. " to " .. backup_dir)
-                local ok = moveFile(plugin_dir, backup_dir)
-                if not ok then
-                    step_concluded()
-                    warn("Failed to move old plugin directory")
-                    UIManager:show(InfoMessage:new {
-                        text = _("Failed to move the old plugin directory.\nCannot perform update automatically."),
-                    })
-                    callback({ success = false, temporary_issue = false, intervention_required = true })
-                    return
-                end
-                lfs.mkdir(plugin_dir)
-                dbg("Unpacking plugin archive " .. update_file .. " to " .. plugin_dir)
-                local ok, err = Device:unpackArchive(update_file, plugin_dir, true)
-                if not ok then
-                    warn("Failed to extract update file", err)
-
-                    _async_update_step("Something went wrong. Rolling back…", step_concluded, function(step_concluded)
-                        local restoring = true
-                        if lfs.attributes(plugin_dir) ~= nil then
-                            dbg("[recovery] Purging", plugin_dir)
-                            if not ffiUtil.purgeDir(plugin_dir) then restoring = false end
-                        end
-                        if restoring then
-                            dbg("[recovery] Moving " .. backup_dir .. " to " .. plugin_dir)
-                            restoring = moveFile(backup_dir, plugin_dir)
-                        end
-                        step_concluded()
-                        local restored = restoring
-                        local text = _("Failed to extract update file.\nCannot perform update automatically.\nCheck the update zip file inside plugins/ directory.")
-                        if not restored then
-                            text = text .. "\n\n" .. _("Failed to clean up intermediate plugins/ directories.\nPlease resolve situation by hand.")
-                        end
-                        UIManager:show(InfoMessage:new { text = text })
-                        callback({ success = false, temporary_issue = false, intervention_required = true })
-                    end)
-                    return
-                end
-
-                _async_update_step("Verifying update integrity…", step_concluded, function(step_concluded)
-                    local meta_file = plugin_dir .. "/_meta.lua"
-                    if not lfs.attributes(meta_file) then
-                        step_concluded()
-                        warn("Plugin validation failed (no _meta.lua file found).")
-                        UIManager:show(InfoMessage:new {
-                            text = T(_("Failed to verify the patched update.\n\nPlease check plugins/ directory and resolve situation by hand."),
-                                    err or "reason unknown"),
-                        })
-                        callback({ success = false, temporary_issue = false, intervention_required = true })
-                        return
-                    end
-                    local new_meta = dofile(plugin_dir .. "/_meta.lua")
-                    if new_meta.version ~= remote.version then
-                        step_concluded()
-                        warn("Updated plugin version mismatch. Got " .. new_meta.version .. ", expected " .. remote.version)
-                        UIManager:show(InfoMessage:new {
-                            text = T(_("Failed to verify the patched update (wrong version in _meta.lua).\n\nPlease check plugins/ directory and resolve situation by hand."),
-                                    err or "reason unknown"),
-                        })
-                        callback({ success = false, temporary_issue = false, intervention_required = true })
-                        return
-                    end
-                    meta = new_meta
-
-                    _async_update_step("Post-update cleanup…", step_concluded, function(step_concluded)
-                        dbg("[cleanup] Update extracted, purging old version", backup_dir)
-                        local ok, err = ffiUtil.purgeDir(backup_dir)
-                        if not ok then
-                            step_concluded()
-                            warn("Failed to remove old plugin dir", err)
-                            UIManager:show(InfoMessage:new {
-                                text = T(_("Failed to perform cleanup operation after patching the update:\n%1\n\nPlease check plugins/ directory and remove the '.backup' directory and zip file by hand."),
-                                        err or "reason unknown"),
-                            })
-                            callback({ success = false, temporary_issue = false, intervention_required = true })
-                            return
-                        end
-                        dbg("[cleanup] Removing plugin update archive", update_file)
-                        local ok, err = os.remove(update_file)
-                        if not ok then
-                            step_concluded()
-                            warn("Failed to remove plugin update file", err)
-                            UIManager:show(InfoMessage:new {
-                                text = T(_("Failed to perform cleanup operation after patching the update:\n%1\n\nPlease check plugins/ directory and remove the zip file by hand."),
-                                        err or "reason unknown"),
-                            })
-                            callback({ success = false, temporary_issue = false, intervention_required = true })
-                            return
-                        end
-
-                        step_concluded()
-                        UIManager:askForRestart("Plugin updated successfully. To use the new version, the device must be restarted.")
-                        callback({ success = true })
-                    end)
-                end)
-            end)
-        end)
-    end)
-end
-
-local function markCheckedAt(timestamp)
-    dbg("AutoChecker: store latest checked at", timestamp)
-    G_reader_settings:saveSetting(settingId .. ":checked_at", timestamp or time.now())
-end
-
-local function getAutoCheckThrottleDelayFts(throttle_duration_s)
-    local last_check = G_reader_settings:readSetting(settingId .. ":checked_at")
-    if not last_check then
-        dbg("AutoChecker: no stored latest checked at found")
-        return 0
+    -- quick check content JSON format
+    local content = table.concat(sink)
+    if content == "" or content:sub(1, 1) ~= "{" then
+        warn("Expected plugin meta JSON response, got", content)
+        return nil
     end
-    local now = time.now()
-    local elapsed_fts = now - last_check
-    local interval_fts = time.s(throttle_duration_s)
-    local diff_fts = interval_fts - elapsed_fts
-    dbg("AutoChecker: found latest checked at; diff =", time.to_s(diff_fts), "seconds")
-    return math.max(0, diff_fts)
+    -- parse JSON
+    local ok, data = pcall(JSON.decode, content, JSON.decode.simple)
+    if not ok or not data then
+        warn("Failed to parse plugin meta JSON", data)
+        return nil
+    end
+    return data
 end
+
+-- file system
+
+local function moveFile(src, dest)
+    local mv_bin = Device:isAndroid() and "/system/bin/mv" or "/bin/mv"
+    return ffiUtil.execute(mv_bin, src, dest) == 0
+end
+
+--endregion
+--region PluginUpdater
+
+local PluginUpdater = EventListener:extend {
+    parse_plugin_info = nil,
+}
 
 --- Checks for updates.
 ---
 --- @param args.silent nil | boolean If true, don't show any notifications during the check for updates. E.g., use this for background checks.
---- @param args.failed_callback nil | function Called with error string after an unsuccessful check (e.g., connection failed).
---- @param args.checked_callback nil | function Called after a successful check.
---- @param args.update_callback nil | function Called after an update attempt.
-local function checkNow(args)
+--- @param args.force_download nil | boolean Ignore any locally found update zip file.
+--- @param args.force_update nil | boolean Update even if the version matches (intended for debugging).
+--- @param args.callback nil | function Called settled state (see code below for available properties).
+function PluginUpdater:checkNow(args)
     if not args then args = {} end
     local silent = args.silent or false
-    local failed_callback = args.failed_callback or function() end
-    local checked_callback = args.checked_callback or function() end
-    local update_callback = args.update_callback or function() end
+    local force_download = args.force_download or false
+    local force_update = args.force_update or false
+    local callback = args.callback or function() end
 
-    if not NetworkMgr:isWifiOn() then
-        dbg("No wi-fi")
-        if not silent then
-            Notification:notify(_("Turn on Wi-Fi first."), Notification.SOURCE_DISPATCHER)
+    -- state is updated during update process
+    local state = {
+        error = nil, -- nil | string
+        local_info = meta,
+
+        fetched_at = nil, -- nil | timestamp
+        fetched_info = nil, -- nil | ReturnType<parse_plugin_info>
+        update_detected = false, -- boolean
+        update_forced = false, -- boolean
+        
+        update_dismissed_by_user_at = nil, -- nil | timestamp
+        update_dismissed_by_emulator_at = nil, -- nil | timestamp
+        update_triggered_at = nil, -- nil | timestamp
+
+        plugin_dir = nil, -- nil | path
+        archive_file = nil, -- nil | path
+        archive_file_reuse = false, -- boolean
+        extract_dir = nil, -- nil | path
+        update_verified_at = nil, -- nil | timestamp
+        backup_dir = nil, -- nil | path
+
+        update_succeeded_at = nil, -- nil | timestamp
+        cleanup_succeeded_at = nil, -- nil | timestamp
+    }
+
+    -- update steps
+
+    local function checkOnline()
+        if not NetworkMgr:isWifiOn() then
+            state.error = "No Wi-Fi"; warn(state.error)
+            if not silent then
+                Notification:notify(_("Turn on Wi-Fi first."), Notification.SOURCE_DISPATCHER)
+            end
+            return false
         end
-        failed_callback("No Wi-Fi")
-        return
-    end
-    if not NetworkMgr:isOnline() then
-        dbg("Not online")
-        if not silent then
-            Notification:notify(_("No internet connection."), Notification.SOURCE_DISPATCHER)
+        if not NetworkMgr:isOnline() then
+            state.error = "Not online"; warn(state.error)
+            if not silent then
+                Notification:notify(_("No internet connection."), Notification.SOURCE_DISPATCHER)
+            end
+            return false
         end
-        failed_callback("Not online")
-        return
+        return true
     end
 
-    _async_update_step((silent and {} or { "Checking for update…" })[1], function(step_concluded)
-        local ok, remote = fetchRemoteMeta()
-        if not ok then
-            step_concluded()
+    local function checkForUpdates()
+        local json = fetchJson({ url = meta.update_url, method = "GET" })
+        if not json then
+            state.error = "Fetch failed"; warn(state.error)
             if not silent then
                 Notification:notify(_("Failed to fetch plugin details."), Notification.SOURCE_DISPATCHER)
             end
-            failed_callback("Fetch failed")
-            return
+            return false
         end
-        if DEBUG_FORCE_UPDATE then
-            dbg("Skipping version check due to debug flag.")
-        else
-            if remote.version == meta.version then
-                dbg("Already on latest version. Remote:", remote.version, "Local:", meta.version)
-                step_concluded()
-                if not silent then
-                    Notification:notify(T(_("You're already up to date (v%1)"), meta.version), Notification.SOURCE_DISPATCHER)
-                end
-                markCheckedAt()
-                if auto_checker then auto_checker:reschedule() end
-                checked_callback({ update_available = false, update_triggered = false })
-                return
-            end
-            dbg("Version mismatch; assuming update available. Remote:", remote.version, "Local:", meta.version)
+        local fetched_info = self.parse_plugin_info(json)
+        state.fetched_at = os.time()
+        state.fetched_info = fetched_info
+        state.update_detected = fetched_info.version ~= state.local_info.version
+        if state.update_detected then
+            dbg("Update available. Remote:", fetched_info.version, "Local:", state.local_info.version)
+            return true
         end
-        step_concluded()
-        busy = true
-        markCheckedAt()
+        if force_update then
+            state.update_forced = true
+            dbg("Already on latest, but forcing update due to debug flag.", fetched_info.version)
+            return true
+        end
+        dbg("Already on latest version. Remote:", fetched_info.version, "Local:", meta.version)
+        if not silent then
+            Notification:notify(T(_("You're already up to date (v%1)"), meta.version), Notification.SOURCE_DISPATCHER)
+        end
+        return false
+    end
+
+    local function askForUpdateAsync(callback)
         UIManager:show(InfoMessage:new {
             show_icon = false,
-            text = _("Plugin update available: ") .. remote.version .. "\n" .. remote.name .. "\n\n" .. remote.description,
+            text = _("Plugin update available: ") .. state.fetched_info.version .. "\n" .. state.fetched_info.name .. "\n\n" .. state.fetched_info.description,
             dismiss_callback = function()
                 UIManager:show(ConfirmBox:new{
-                    text = T(_("Update to %1 v%2 now?"), meta.fullname, remote.version),
+                    text = T(_("Update to %1 v%2 now?"), meta.fullname, state.fetched_info.version),
                     ok_text = _("Update"),
                     dismissable = false,
                     cancel_callback = function()
-                        busy = false
-                        checked_callback({ update_available = true, update_triggered = false })
+                        state.update_dismissed_by_user_at = os.time()
+                        callback(false)
                     end,
                     ok_callback = function()
-                        checked_callback({ update_available = true, update_triggered = true })
                         if Device.isEmulator() then
                             UIManager:show(InfoMessage:new {
                                 text = _("Emulator detected.\nWe don't patch updates in emulator to spare you from nuking local code changes.\nIf you need to test the updater, use desktop KOReader instead."),
                             })
-                            busy = false
-                            update_callback({ success = false, temporary_issue = false, intervention_required = true })
+                            state.update_dismissed_by_emulator_at = os.time()
+                            callback(false)
                             return
                         end
-                        perform_update({ remote = remote, callback = update_callback })
+                        state.update_triggered_at = os.time()
+                        callback(true)
                     end,
                 })
             end
         })
-    end)
-end
-
-local DURATION_SECOND = 1
-local DURATION_MINUTE = DURATION_SECOND * 60
-local DURATION_HOUR = DURATION_MINUTE * 60
-local DURATION_DAY = DURATION_HOUR * 24
-local DURATION_WEEK = DURATION_DAY * 7
-local DURATION_4WEEKS = DURATION_WEEK * 4
-
-local BACKOFF = {
-    DURATION_SECOND * 20,
-    DURATION_MINUTE,
-    DURATION_MINUTE * 20,
-    DURATION_HOUR * 2,
-    DURATION_DAY,
-}
-
-local AutoChecker = EventListener:extend {
-    min_seconds_between_checks = DURATION_WEEK,
-    min_seconds_between_remind = DURATION_DAY,
-    pause_while = nil,
-    stopped = false,
-    backoff_idx = 0,
-    _scheduleId = 0,
-}
-
-function AutoChecker:free()
-    self.stopped = true
-    self.pause_while = nil
-end
-
-local function scheduleInOneMinute(cb)
-    UIManager:scheduleIn(DURATION_MINUTE, cb)
-end
-
-local function parsePauseSchedulerFactory(fn)
-    if not fn then return false end
-    local result = fn()
-    if not result then return false end
-    if result == true then return scheduleInOneMinute end
-    return result
-end
-
-function AutoChecker:_getPauseScheduler()
-    if self.stopped then return nil end
-    local res = parsePauseSchedulerFactory(self.pause_while)
-    if res then return res, "local pause" end
-    for idx, fn in ipairs(publicApi._pause_checks) do
-        local res = parsePauseSchedulerFactory(fn)
-        if res then return res, "global pause #" .. idx end
     end
-    if Device.screen_saver_mode then return scheduleInOneMinute, "screensaver mode" end
-    if Device.screen_saver_lock then return scheduleInOneMinute, "screensaver lock" end
-    if busy then return scheduleInOneMinute, "updater is busy" end
-    return nil
-end
 
-function AutoChecker:doBackOff(reason)
-    self.backoff_idx = self.backoff_idx + 1
-    local backoff = math.min(BACKOFF[self.backoff_idx] or DURATION_DAY, self.min_seconds_between_checks)
-    dbg("AutoChecker: backoff retry due to " .. reason .. " [", backoff, "seconds]")
-    self:scheduleIn(time.s(backoff))
-end
-
-function AutoChecker:checkNow()
-    if self.stopped then return end
-    local rescheduleFn, reason = self:_getPauseScheduler()
-    if rescheduleFn ~= nil then
-        dbg("AutoChecker: paused due to " .. reason)
-        rescheduleFn(function() self:scheduleWithNextWiFi() end)
-        return
-    end
-    dbg("AutoChecker: check now")
-    local _id = self._scheduleId
-    checkNow({
-        silent = true,
-        failed_callback = function()
-            if _id ~= self._scheduleId then return end
-            self:doBackOff("failed fetch attempt")
-        end,
-        checked_callback = function(state)
-            if not state.update_available then
-                -- the re-schedule is already triggered by checkNow, as it
-                -- always re-schedules the AutoChecker singleton
-                return
-            end
-            if not state.update_triggered then
-                if self.min_seconds_between_remind > 0 then
-                    dbg("AutoChecker: Update was dismissed. Scheduling a reminder…")
-                    self:scheduleIn(time.s(self.min_seconds_between_remind))
-                else
-                    dbg("AutoChecker: Update was dismissed. Reminders are disabled.")
-                end
-                return
-            end
-        end,
-        update_callback = function(state)
-            if not state.success and state.temporary_issue then
-                if self.min_seconds_between_remind > 0 then
-                    dbg("AutoChecker: Update failed due to temporary issue. Scheduling a reminder to try again…")
-                    self:scheduleIn(time.s(self.min_seconds_between_remind))
-                else
-                    dbg("AutoChecker: Update failed tue to temporary issue. Reminders are disabled.")
-                end
-                return
-            end
-        end,
-    })
-end
-
-function AutoChecker:reschedule()
-    self._scheduleId = self._scheduleId + 1
-    self:schedule()
-end
-
-function AutoChecker:scheduleWithNextWiFi()
-    if self.stopped then return end
-    dbg("AutoChecker: schedule with next WiFi")
-    if not NetworkMgr:isConnected() then self.backoff_idx = 0 end
-    local _id = self._scheduleId
-    NetworkMgr:runWhenConnected(function()
-        if _id ~= self._scheduleId then return end
-        self:checkNow()
-    end)
-end
-
-function AutoChecker:scheduleIn(delay_fts)
-    if self.stopped then return end
-    local delay_s = time.to_s(delay_fts)
-    dbg("AutoChecker: schedule in", delay_s, "seconds")
-    local _id = self._scheduleId
-    UIManager:scheduleIn(delay_s, function()
-        if _id ~= self._scheduleId then return end
-        self:scheduleWithNextWiFi()
-    end)
-end
-
-function AutoChecker:schedule()
-    self.backoff_idx = 0
-    local delay_fts = getAutoCheckThrottleDelayFts(self.min_seconds_between_checks)
-    if delay_fts > 0 then self:scheduleIn(delay_fts) else self:scheduleWithNextWiFi() end
-end
-
---- Stops the background job started by `enableAutoChecks`.
-local function disableAutoChecks()
-    if not auto_checker then
-        warn("Called disableAutoChecks() but none is running")
-        return false
-    end
-    dbg("AutoChecker: Disable background check")
-    auto_checker:free()
-    auto_checker = nil
-    return true
-end
-
---- Starts a background job that silently checks for updates whenever connected
---- to Wi-Fi.
----
---- @param args.min_seconds_between_checks nil | number The minimal duration to wait after a successful check before checking again.
---- @param args.min_seconds_between_remind number The minimal duration to wait after a dismissed update to remind again. Set to 0 to disable reminders.
---- @param args.pause_while nil | function Optional function to suspend the background checker. If specified, the function may return `false` to indicate that checks may be run, `true` to indicate to ask again in 60 seconds, or a function that receives a callback to call when to ask again.
---- @param args.silent_override nil | boolean Don't warn-log if already enabled.
-local function enableAutoChecks(args)
-    if not args then args = {} end
-    local min_seconds_between_checks = args.min_seconds_between_checks or DURATION_WEEK
-    local min_seconds_between_remind = args.min_seconds_between_remind
-    local pause_while = args.pause_while or nil
-
-    if auto_checker ~= nil then
-        if not args.silent_override then
-            warn("Called enableAutoChecks() while another background check is still enabled. Stopping old instance.")
+    local function findPluginDir()
+        state.plugin_dir = getPluginDir()
+        if not state.plugin_dir then
+            warn("Failed to detect plugin root")
+            UIManager:show(InfoMessage:new {
+                text = _("Failed to detect plugin root.\nCannot perform update automatically."),
+            })
+            return false
         end
-        disableAutoChecks()
+        return true
     end
-    dbg("AutoChecker: Enable background check each " .. min_seconds_between_checks .. " seconds.")
-    auto_checker = AutoChecker:new {
-        min_seconds_between_checks = min_seconds_between_checks,
-        min_seconds_between_remind = min_seconds_between_remind,
-        pause_while = pause_while,
-    }
-    auto_checker:schedule()
+
+    local function downloadUpdateFile()
+        local archive_file = state.plugin_dir .. "_" .. state.fetched_info.version ..".zip"
+        if lfs.attributes(archive_file) ~= nil then
+            if not force_download then
+                warn("Update file already present in file system. Re-using it to avoid re-download.", state.archive_file)
+                Notification:notify(_("Update file found. Skipping download."), Notification.SOURCE_DISPATCHER)
+                state.archive_file = archive_file
+                state.archive_file_reuse = true
+                return true
+            end
+            dbg("Update file present in file system. Removing due to force flag.", archive_file)
+            local ok, err = os.remove(archive_file)
+            if not ok then
+                state.error = "Failed to remove old plugin update file; " .. err; warn(state.error)
+                return false
+            end
+            dbg("Old update file removed.")
+        end
+        local ok, reason = downloadFile(archive_file, state.fetched_info.zip_url)
+        if not ok then
+            state.error = "Failed to download update file; " .. reason; warn(state.error)
+            UIManager:show(InfoMessage:new {
+                text = T(_("Failed to download update file.\nPlease check connection and try again.\n\n%1"), reason),
+            })
+            return false
+        end
+        state.archive_file = archive_file
+        return true
+    end
+
+    local function unpackArchive()
+        local extract_dir = state.plugin_dir .. "_" .. state.fetched_info.version
+        lfs.mkdir(extract_dir)
+        dbg("Unpacking plugin archive " .. state.archive_file .. " to " .. extract_dir)
+        local ok, err = Device:unpackArchive(state.archive_file, extract_dir, true)
+        if not ok then
+            state.error = "Failed to extract update file; " .. err; warn(state.error)
+            UIManager:show(InfoMessage:new {
+                text = T(_("Failed to extract update file.\n\n%1"), err),
+            })
+            return false
+        end
+        state.extract_dir = extract_dir
+        return true
+    end
+
+    local function verifyUpdate()
+        local meta_file = state.extract_dir .. "/_meta.lua"
+        if not lfs.attributes(meta_file) then
+            state.error = "Plugin validation failed (no _meta.lua file found)"; warn(state.error)
+            UIManager:show(InfoMessage:new {
+                text = _("Failed to verify the patched update.\nNo _meta.lua file found.\n\nPlease check plugins/ directory and resolve situation by hand."),
+            })
+            return false
+        end
+        state.update_meta = dofile(meta_file)
+        if state.update_meta.version ~= state.fetched_info.version then
+            state.error = "Updated plugin version mismatch. Got " .. state.update_meta.version .. ", expected " .. state.fetched_info.version; warn(state.error)
+            UIManager:show(InfoMessage:new {
+                text = _("Failed to verify the patched update (wrong version in _meta.lua).\n\nPlease check plugins/ directory and resolve situation by hand."),
+            })
+            return false
+        end
+        state.update_verified_at = os.time()
+        return true
+    end
+
+    local function swapPluginDirs()
+        local backup_dir = state.plugin_dir .. ".backup"
+        if lfs.attributes(backup_dir) == nil then
+            state.backup_dir = backup_dir
+        else
+            dbg("Backup dir already exists. Detecting unused suffix…")
+            for num = 2, 9 do
+                if not lfs.attributes(backup_dir .. "_" .. num) then
+                    state.backup_dir = backup_dir .. "_" .. num
+                    break
+                end
+            end
+            if not state.backup_dir then
+                state.error = "Failed to detect unused backup dir; suffix = " .. backup_dir; warn(state.error)
+                UIManager:show(InfoMessage:new {
+                    text = _("Failed to find available backup directory.\nCheck plugins/ to clean obsolete directories."),
+                })
+                return false
+            end
+        end
+        dbg("Moving " .. state.plugin_dir .. " to " .. state.backup_dir)
+        local ok = moveFile(state.plugin_dir, state.backup_dir)
+        if not ok then
+            state.error = "Failed to move old plugin directory"; warn(state.error)
+            UIManager:show(InfoMessage:new {
+                text = _("Failed to move the old plugin directory.\nCannot perform update automatically."),
+            })
+            return false
+        end
+        dbg("Moving " .. state.extract_dir .. " to " .. state.plugin_dir)
+        local ok = moveFile(state.extract_dir, state.plugin_dir)
+        if not ok then
+            state.error = "Failed to move new plugin directory"; warn(state.error)
+            UIManager:show(InfoMessage:new {
+                text = _("Failed to move the new plugin directory."),
+            })
+            return false
+        end
+        return true
+    end
+
+    local function postUpdateCleanup()
+        dbg("[cleanup] Removing plugin update archive", state.archive_file)
+        local error = ""
+        local ok, err = os.remove(state.archive_file)
+        if not ok then
+            warn("Failed to remove plugin update file", err)
+            if error ~= "" then error = error .. "\n\n" end
+            error = error .. T(_("Failed to remove archive file:\n%1\n%2"), state.archive_file, err or "reason unknown")
+        end
+        dbg("[cleanup] Update extracted, purging old version", state.backup_dir)
+        local ok, err = ffiUtil.purgeDir(state.backup_dir)
+        if not ok then
+            warn("Failed to remove old plugin dir", err)
+            if error ~= "" then error = error .. "\n\n" end
+            error = error .. T(_("Failed to remove old plugin directory:\n%1\n%2"), state.backup_dir, err or "reason unknown")
+        end
+        if error ~= "" then
+            UIManager:show(InfoMessage:new {
+                text = error .. "\n\n" .. _("Please check plugins/ directory and clean up by hand.")
+            })
+            return false
+        end
+        return true
+    end
+
+    -- perform update process
+    runAsync(function()
+        local continue = syncStep(checkOnline, (silent and {} or { "Checking online state…" })[1])
+        dbg("CONCLUSION", continue)
+        if not continue then return callback(state) end
+
+        local continue = syncStep(checkForUpdates, (silent and {} or { "Checking for update…" })[1])
+        if not continue then return callback(state) end
+
+        local continue = asyncStep(askForUpdateAsync)
+        if not continue then return callback(state) end
+
+        local continue = syncStep(findPluginDir, "Preparing for update…")
+        if not continue then return callback(state) end
+
+        local continue = syncStep(downloadUpdateFile, "Downloading…")
+        if not continue then return callback(state) end
+
+        local continue = syncStep(unpackArchive, "Extracting…")
+        if not continue then return callback(state) end
+
+        local continue = syncStep(verifyUpdate, "Verifying update integrity…")
+        if not continue then return callback(state) end
+
+        local continue = syncStep(swapPluginDirs, "Applying update…")
+        if not continue then return callback(state) end
+        state.update_succeeded_at = os.time()
+
+        local continue = syncStep(postUpdateCleanup, "Update succeeded. Cleaning up…")
+        if not continue then return callback(state) end
+        state.cleanup_succeeded_at = os.time()
+
+        UIManager:askForRestart("Plugin update succeeded. To use the new version, the device must be restarted.")
+        callback(state)
+    end)
 end
 
-return {
-    _settingId = settingId,
-
-    DURATION_SECOND = DURATION_SECOND,
-    DURATION_MINUTE = DURATION_MINUTE,
-    DURATION_HOUR = DURATION_HOUR,
-    DURATION_DAY = DURATION_DAY,
-    DURATION_WEEK = DURATION_WEEK,
-    DURATION_4WEEKS = DURATION_4WEEKS,
-
-    checkNow = checkNow,
-    enableAutoChecks = enableAutoChecks,
-    disableAutoChecks = disableAutoChecks,
-}
+return PluginUpdater

@@ -4,7 +4,6 @@ local ConfigDialog = require("ui/widget/configdialog")
 local C_ = _.pgettext
 
 local pluginSettings = require("plugin/settings")
-local pluginUpdater = require("plugin/updater")
 
 local DEBUG_OPTIONS = Device:isEmulator()
 --DEBUG_OPTIONS = true
@@ -115,15 +114,15 @@ local UiSettingsDialog = ConfigDialog:extend {
                     },
                     values = {
                         0,
-                        pluginUpdater.DURATION_DAY,
-                        pluginUpdater.DURATION_WEEK,
-                        pluginUpdater.DURATION_DAY * 30,
+                        3600 * 24,
+                        3600 * 24 * 7,
+                        3600 * 24 * 30,
                     },
                     args = {
                         0,
-                        pluginUpdater.DURATION_DAY,
-                        pluginUpdater.DURATION_WEEK,
-                        pluginUpdater.DURATION_DAY * 30,
+                        3600 * 24,
+                        3600 * 24 * 7,
+                        3600 * 24 * 30,
                     },
                     event = "SetCheckUpdateInterval",
                 },
@@ -138,15 +137,15 @@ local UiSettingsDialog = ConfigDialog:extend {
                     },
                     values = {
                         0,
-                        pluginUpdater.DURATION_DAY,
-                        pluginUpdater.DURATION_WEEK,
-                        pluginUpdater.DURATION_DAY * 30,
+                        3600 * 24,
+                        3600 * 24 * 7,
+                        3600 * 24 * 30,
                     },
                     args = {
                         0,
-                        pluginUpdater.DURATION_DAY,
-                        pluginUpdater.DURATION_WEEK,
-                        pluginUpdater.DURATION_DAY * 30,
+                        3600 * 24,
+                        3600 * 24 * 7,
+                        3600 * 24 * 30,
                     },
                     event = "SetUpdateReminderInterval",
                 },
@@ -218,30 +217,15 @@ function UiSettingsDialog:onSetNoteMode(value)
     return true
 end
 
-local function refreshPluginUpdater()
-    local check_interval = pluginSettings.getCheckUpdateInterval()
-    if check_interval > 0 then
-        pluginUpdater.enableAutoChecks({
-            min_seconds_between_checks = check_interval,
-            min_seconds_between_remind = pluginSettings.getUpdateReminderInterval(),
-            silent_override = true,
-        })
-    else
-        pluginUpdater.disableAutoChecks()
-    end
-end
-
 function UiSettingsDialog:onSetCheckUpdateInterval(value)
     pluginSettings.setCheckUpdateInterval(value)
     self.configurable.check_update_interval = value
-    refreshPluginUpdater()
     return true
 end
 
 function UiSettingsDialog:onSetUpdateReminderInterval(value)
     pluginSettings.setUpdateReminderInterval(value)
     self.configurable.update_reminder_interval = value
-    refreshPluginUpdater()
     return true
 end
 
