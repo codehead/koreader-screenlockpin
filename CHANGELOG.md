@@ -10,7 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - [#15](https://github.com/oleasteo/koreader-screenlockpin/issues/15)
   Check for updates menu item with automatic plugin update procedure.
 - [#28](https://github.com/oleasteo/koreader-screenlockpin/issues/28)
-  Background job to check for updates automatically (configurable intervals).
+  "Background job" to check for updates automatically (configurable intervals).
+  Actually, there is no background job but distinct triggers (e.g., device
+  unlock, WiFi connection established) that cause us to check for updates, if
+  the interval is elapsed.
 
 ### Fixes
 
