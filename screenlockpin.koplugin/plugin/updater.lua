@@ -76,9 +76,9 @@ local function runAsync(task)
     cont()
 end
 
-local function asyncStep(step, text)
+local function asyncStep(step, text, silent)
     local done = function() end
-    if text ~= nil then
+    if text ~= nil and not silent then
         local status_widget = InfoMessage:new { text = _(text), dismissable = false }
         UIManager:show(status_widget, "ui")
         done = function() UIManager:close(status_widget, "ui") end
@@ -91,8 +91,8 @@ local function asyncStep(step, text)
     return val
 end
 
-local function syncStep(step, text)
-    return asyncStep(function(cb) cb(step()) end, text)
+local function syncStep(step, text, silent)
+    return asyncStep(function(cb) cb(step()) end, text, silent)
 end
 
 -- http
@@ -427,14 +427,13 @@ function PluginUpdater:checkNow(args)
 
     -- perform update process
     runAsync(function()
-        local continue = syncStep(checkOnline, (silent and {} or { "Checking online state…" })[1])
-        dbg("CONCLUSION", continue)
+        local continue = syncStep(checkOnline, "Checking online state…", silent)
         if not continue then return callback(state) end
 
-        local continue = syncStep(checkForUpdates, (silent and {} or { "Checking for update…" })[1])
+        local continue = syncStep(checkForUpdates, "Checking for update…", silent)
         if not continue then return callback(state) end
 
-        local continue = asyncStep(askForUpdateAsync)
+        local continue = asyncStep(askForUpdateAsync, "Asking for update…", true)
         if not continue then return callback(state) end
 
         local continue = syncStep(findPluginDir, "Preparing for update…")

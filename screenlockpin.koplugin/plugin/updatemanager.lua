@@ -21,7 +21,7 @@
 -- SOFTWARE.
 
 --- A trivial way to compare your version with upstream
-local UPDATER_VERSION = 1 -- 2025-11
+local UPDATER_VERSION = 2 -- 2025-12
 
 --[[
 
@@ -45,13 +45,14 @@ local PluginShare = require("pluginshare")
 local Notification = require("ui/widget/notification")
 local EventListener = require("ui/widget/eventlistener")
 
+-- if your plugin structure differs, this path might need adjustment
 local PluginUpdater = require("plugin/updater");
 
 --region Register Public API
 
 local share_authority = not PluginShare.plugin_updater_v1
 if share_authority then
-    -- Reminder: This public API should stay backward compatible; extend, don't break.
+    -- Reminder: This public API should stay backward compatible; extend, don't break. The version is the API version, __not__ the UPDATER_VERSION, btw.
     PluginShare.plugin_updater_v1 = EventListener:extend {
         _pause_predicates = {},
         --- A table of all modules; see below
@@ -77,7 +78,7 @@ if share_authority then
         ping = function()
             local reason = PluginShare.plugin_updater_v1.isGlobalPaused()
             if reason then
-                logger.dbg("[updatemgr:global]", "paused due to", reason)
+                logger.dbg("[plugin_updater_v1:global]", "paused due to", reason)
                 return
             end
             for _, mod in pairs(PluginShare.plugin_updater_v1.modules) do
@@ -351,6 +352,7 @@ function PluginUpdateMgr:_handleCheckResult(result, prev_state)
     end
     self:_dropDismissedStore()
     if not result.update_detected and not result.update_forced then
+        self._state = prev_state
         dbg("already on latest")
         return
     end
