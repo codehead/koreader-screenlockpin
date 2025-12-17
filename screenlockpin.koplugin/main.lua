@@ -61,7 +61,7 @@ function ScreenLockPinPlugin:init()
     })
 
     self.public_api = ScreenLockPinPublicApi
-    PluginShare.screen_lock_pin = self.public
+    PluginShare.screen_lock_pin = self.public_api
 
     PluginShare.plugin_updater_v1.registerPause(function ()
         if lockscreenCtrl.isActive() then return "ScreenLockPin:LockScreen" end
