@@ -253,7 +253,7 @@ function PluginUpdater:checkNow(args)
     local function askForUpdateAsync(callback)
         UIManager:show(InfoMessage:new {
             show_icon = false,
-            text = _("Plugin update available: ") .. state.fetched_info.version .. "\n" .. state.fetched_info.name .. "\n\n" .. state.fetched_info.description,
+            text = T(_("Plugin Update available\n\n%1: %2\n[%3 → %4]\n\n%5"), meta.fullname, state.fetched_info.name, state.local_info.version, state.fetched_info.version, state.fetched_info.description),
             dismiss_callback = function()
                 UIManager:show(ConfirmBox:new{
                     text = T(_("Update to %1 v%2 now?"), meta.fullname, state.fetched_info.version),
