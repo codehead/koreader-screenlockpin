@@ -5,6 +5,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 [//]: # (## [Unreleased])
 
+## [2025.12] - 2025-12-17
+
+If everything works out, this should be the last update that you have to do by
+hand. From now on, the built-in updater will check "in the background" according
+to configured intervals (by default up to once a week) if any new updates are
+available. They'll patch themselves as well (with lots of safety guards) 🤞
+
+In addition, this update includes improvements (esp. for desktop users) and
+fixes.
+
+Merry Christmas 🎄
+
+### Changed
+
+- [#33](https://github.com/oleasteo/koreader-screenlockpin/issues/33)
+  Tweaked refresh on unlock. If we're going to unlock to the reader UI, we use
+  a heavier refresh to avoid bad ghosting. Outside the reader UI, we accept some
+  ghosting for the performance benefit of a lighter refresh (still, flashing)
+  instead.
+- [#37](https://github.com/oleasteo/koreader-screenlockpin/issues/37)
+  Don't purge plugin settings on plugin disable. This is more in line with other
+  plugins.
+
+### Added
+
+- [#15](https://github.com/oleasteo/koreader-screenlockpin/issues/15)
+  Check for updates menu item with automatic plugin update procedure.
+- [#28](https://github.com/oleasteo/koreader-screenlockpin/issues/28)
+  "Background job" to check for updates automatically (configurable intervals).
+  Actually, there is no background job but distinct triggers (e.g., device
+  unlock, WiFi connection established) that cause us to check for updates, if
+  the interval is elapsed.
+
+### Fixes
+
+- [#32](https://github.com/oleasteo/koreader-screenlockpin/issues/32)
+  Hide screenshot related options on desktop devices.
+- [#30](https://github.com/oleasteo/koreader-screenlockpin/issues/30)
+  Fill backdrop on desktop devices.
+- [#29](https://github.com/oleasteo/koreader-screenlockpin/issues/29)
+  Hide lock on wakeup on devices that cannot suspend.
+- [#36](https://github.com/oleasteo/koreader-screenlockpin/issues/36)
+  Notes icon doesn't distort anymore.
+- Properly expose `PluginShare.screen_lock_pin`.
+
 ## [2025.11-1] - 2025-11-16
 
 The major addition in this release is the (basic) frontlight control. Just tap

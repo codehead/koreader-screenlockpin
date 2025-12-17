@@ -8,11 +8,14 @@ local EventListener = require("ui/widget/eventlistener")
 local ScreenLockPinPublicApi = require("plugin/publicapi")
 local pluginMenu = require("plugin/menu")
 local pluginSettings = require("plugin/settings")
+local PluginUpdateMgr = require("plugin/updatemanager")
 local onBootHook = require("plugin/util/onboothook")
 local screensaverUtil = require("plugin/util/screensaverutil")
 local lockscreenCtrl = require("plugin/ui/ctrl/lockscreenctrl")
 
-local ScreenLockPinPlugin = EventListener:extend {}
+local ScreenLockPinPlugin = EventListener:extend {
+    stopped = false
+}
 
 pluginSettings.init()
 
@@ -60,7 +63,17 @@ function ScreenLockPinPlugin:init()
     })
 
     self.public_api = ScreenLockPinPublicApi
-    PluginShare.screen_lock_pin = self.public
+    PluginShare.screen_lock_pin = self.public_api
+
+    PluginShare.plugin_updater_v1.registerPause(function ()
+        if lockscreenCtrl.isActive() then return "ScreenLockPin:LockScreen" end
+        return false
+    end)
+
+    PluginUpdateMgr.instance = PluginUpdateMgr:new {
+        between_checks = pluginSettings.getCheckUpdateInterval(),
+        between_remind = pluginSettings.getUpdateReminderInterval(),
+    }
 end
 
 -- KOReader dispatcher actions (registered in ScreenLockPinPlugin:init)
@@ -98,19 +111,27 @@ end
 
 -- KOReader plugin hook (on plugin disable)
 
-function ScreenLockPinPlugin.stopPlugin()
+function ScreenLockPinPlugin:stopPlugin()
+    if self.stopped then return end
     logger.dbg("ScreenLockPin: disable plugin")
     onBootHook.disable()
-    pluginSettings.purge()
+    pluginSettings.destruct()
     PluginShare.screen_lock_pin = nil
+    PluginUpdateMgr.instance:free()
+    PluginUpdateMgr.instance = nil
+    self.public_api = nil
+    self.stopped = true
     return true
 end
 
 -- KOReader plugin hook (on wakeup after suspend)
 
-function ScreenLockPinPlugin.onResume()
-    if not pluginSettings.getEnabled() then return end
-    if not pluginSettings.shouldLockOnWakeup() then return end
+function ScreenLockPinPlugin:onResume()
+    if self.stopped then return end
+    if not pluginSettings.getEnabled() or not pluginSettings.shouldLockOnWakeup() then
+        PluginUpdateMgr.instance:ping()
+        return
+    end
     -- we hijacked the screensaver_delay (property of ui/screensaver.lua)
     -- any unknown values will be interpreted as "tap to exit from screensaver"
     -- this enables us to create a lock screen first before closing the
@@ -121,8 +142,10 @@ end
 -- Monkey-patched hook (registered via onBootHook)
 
 function ScreenLockPinPlugin.onBoot()
-    if not pluginSettings.getEnabled() then return end
-    if not pluginSettings.shouldLockOnBoot() then return end
+    if not pluginSettings.getEnabled() or not pluginSettings.shouldLockOnBoot() then
+        if PluginUpdateMgr.instance then PluginUpdateMgr.instance:ping() end
+        return
+    end
     logger.dbg("ScreenLockPin: lock on boot")
     screensaverUtil.showWhileAwake("lockonboot")
     lockscreenCtrl.showOrClearLockScreen("boot")
