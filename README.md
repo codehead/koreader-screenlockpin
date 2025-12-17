@@ -132,10 +132,6 @@ reboot into KOReader.
 The lock screen is based on your configured wallpaper: *Screen* › *Sleep screen*
 › *Wallpaper*.
 
-### I enabled the lock before changing the PIN. How do I unlock?
-
-The default PIN is `0000`
-
 ### I disabled the *lock on wakeup*, now the device stays on the wallpaper.
 
 On disable, we restore the *Screen* › *Sleep screen* › *Wallpaper* › **Postpone
