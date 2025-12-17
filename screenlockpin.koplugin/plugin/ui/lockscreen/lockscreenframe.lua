@@ -6,7 +6,6 @@ local Size = require("ui/size")
 local Geom = require("ui/geometry")
 local UIManager = require("ui/uimanager")
 local FrameContainer = require("ui/widget/container/framecontainer")
-local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
@@ -65,7 +64,7 @@ function OutsideAreaInput:onTapOutside(_, ges)
     return false  -- Let event propagate to keypad
 end
 
-local LockScreenFrame = InputContainer:extend(WidgetContainer:extend {
+local LockScreenFrame = InputContainer:extend {
     name = "SLPLockScreen",
 
     lock_widget = nil,
@@ -80,7 +79,7 @@ local LockScreenFrame = InputContainer:extend(WidgetContainer:extend {
     _content_region = nil,
     outside_input = nil,
     panel = nil,
-})
+}
 
 function LockScreenFrame:init()
     local uiSettings = pluginSettings.getUiSettings()
