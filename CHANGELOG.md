@@ -3,7 +3,19 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+[//]: # (## [Unreleased])
+
+## [2025.12] - 2025-12-17
+
+If everything works out, this should be the last update that you have to do by
+hand. From now on, the built-in updater will check "in the background" according
+to configured intervals (by default up to once a week) if any new updates are
+available. They'll patch themselves as well (with lots of safety guards) 🤞
+
+In addition, this update includes improvements (esp. for desktop users) and
+fixes.
+
+Merry Christmas 🎄
 
 ### Changed
 
