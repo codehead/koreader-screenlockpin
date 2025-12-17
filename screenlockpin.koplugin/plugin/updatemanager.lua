@@ -40,8 +40,9 @@ ping all updaters after device unlock).
 local _ = require("gettext")
 local logger = require("logger")
 local Device = require("device")
-local UIManager = require("ui/uimanager")
 local PluginShare = require("pluginshare")
+local UIManager = require("ui/uimanager")
+local Widget = require("ui/widget/widget")
 local Notification = require("ui/widget/notification")
 local EventListener = require("ui/widget/eventlistener")
 
@@ -87,7 +88,7 @@ if share_authority then
         end,
     }
     -- Register common event listener for global pings
-    UIManager:show(EventListener:new {
+    UIManager:show(Widget:new {
         invisible = true,
         onNetworkConnected = PluginShare.plugin_updater_v1.ping,
         onResume = PluginShare.plugin_updater_v1.ping,
