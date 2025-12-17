@@ -70,7 +70,7 @@ local function mergeDefaultSettings()
         G_reader_settings:saveSetting("screenlockpin_note_text", "")
     end
     if G_reader_settings:hasNot("screenlockpin_check_updates_interval") then
-        G_reader_settings:saveSetting("screenlockpin_check_updates_interval", 3600 * 24 * 30)
+        G_reader_settings:saveSetting("screenlockpin_check_updates_interval", 3600 * 24 * 7)
     end
     if G_reader_settings:hasNot("screenlockpin_update_reminder_interval") then
         G_reader_settings:saveSetting("screenlockpin_update_reminder_interval", 3600 * 24)
