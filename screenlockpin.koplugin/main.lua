@@ -13,7 +13,9 @@ local onBootHook = require("plugin/util/onboothook")
 local screensaverUtil = require("plugin/util/screensaverutil")
 local lockscreenCtrl = require("plugin/ui/ctrl/lockscreenctrl")
 
-local ScreenLockPinPlugin = EventListener:extend {}
+local ScreenLockPinPlugin = EventListener:extend {
+    stopped = false
+}
 
 pluginSettings.init()
 
@@ -109,19 +111,23 @@ end
 
 -- KOReader plugin hook (on plugin disable)
 
-function ScreenLockPinPlugin.stopPlugin()
+function ScreenLockPinPlugin:stopPlugin()
+    if self.stopped then return end
     logger.dbg("ScreenLockPin: disable plugin")
     onBootHook.disable()
     pluginSettings.destruct()
     PluginShare.screen_lock_pin = nil
     PluginUpdateMgr.instance:free()
     PluginUpdateMgr.instance = nil
+    self.public_api = nil
+    self.stopped = true
     return true
 end
 
 -- KOReader plugin hook (on wakeup after suspend)
 
-function ScreenLockPinPlugin.onResume()
+function ScreenLockPinPlugin:onResume()
+    if self.stopped then return end
     if not pluginSettings.getEnabled() or not pluginSettings.shouldLockOnWakeup() then
         PluginUpdateMgr.instance:ping()
         return
@@ -137,7 +143,7 @@ end
 
 function ScreenLockPinPlugin.onBoot()
     if not pluginSettings.getEnabled() or not pluginSettings.shouldLockOnBoot() then
-        PluginUpdateMgr.instance:ping()
+        if PluginUpdateMgr.instance then PluginUpdateMgr.instance:ping() end
         return
     end
     logger.dbg("ScreenLockPin: lock on boot")
