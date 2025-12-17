@@ -3,6 +3,7 @@ local logger = require("logger")
 local Device = require("device")
 local ffiutil = require("ffi/util")
 local PluginShare = require("pluginshare")
+local ReaderUI = require("apps/reader/readerui")
 local UIManager = require("ui/uimanager")
 local Screensaver = require("ui/screensaver")
 local InfoMessage = require("ui/widget/infomessage")
@@ -12,6 +13,7 @@ local T = ffiutil.template
 local pluginSettings = require("plugin/settings")
 local screensaverUtil = require("plugin/util/screensaverutil")
 local screenshoterUtil = require("plugin/util/screenshoterutil")
+local uiManagerUtil = require("plugin/util/uimanagerutil")
 local NotesFrame = require("plugin/ui/lockscreen/notesframe")
 local LockScreenFrame = require("plugin/ui/lockscreen/lockscreenframe")
 
@@ -57,9 +59,21 @@ local function unlockScreen(cause)
     if not overlay then return false end
     logger.dbg("ScreenLockPin: close lock screen (" .. cause .. ")")
     screensaverUtil.unfreezeScreensaverAbi()
-    screensaverUtil.totalCleanup()
+    -- decide upon refresh type depending on if we unlock to reader UI
+    local hasReaderUi = uiManagerUtil.findTopMostWidget(function(widget)
+        return getmetatable(widget).__index == ReaderUI
+    end) ~= nil
+    if hasReaderUi then
+        logger.dbg("ScreenLockPin: Reader detected; full refresh")
+        screensaverUtil.totalCleanup()
+        UIManager:close(overlay)
+        UIManager:setDirty("all", "full")
+    else
+        logger.dbg("ScreenLockPin: No reader detected; partial refresh should suffice")
+        screensaverUtil.totalCleanup("flashui")
+        UIManager:close(overlay, "flashui", overlay:getRefreshRegion())
+    end
     screenshoterUtil.unfreezeScreenshoterAbi()
-    UIManager:close(overlay, "full", overlay:getRefreshRegion())
     overlay = nil
     local throttled_times = pluginSettings.readPersistentCache("throttled_times") or 0
     if throttled_times >= 2 then

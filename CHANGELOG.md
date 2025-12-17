@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- [#33](https://github.com/oleasteo/koreader-screenlockpin/issues/33)
+  Tweaked refresh on unlock. If we're going to unlock to the reader UI, we use
+  a heavier refresh to avoid bad ghosting. Outside the reader UI, we accept some
+  ghosting for the performance benefit of a lighter refresh (still, flashing)
+  instead.
+
 ### Added
 
 - [#15](https://github.com/oleasteo/koreader-screenlockpin/issues/15)
