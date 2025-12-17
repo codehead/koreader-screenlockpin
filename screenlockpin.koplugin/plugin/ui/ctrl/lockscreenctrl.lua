@@ -103,7 +103,7 @@ local function reuseShowOverlay()
     logger.dbg("ScreenLockPin: clear & show lock")
     overlay:clearInput()
     overlay:setVisible(true)
-    UIManager:setDirty(overlay, "full", overlay:getRefreshRegion())
+    UIManager:setDirty(overlay, "ui", overlay:getRefreshRegion())
 end
 
 local function onResume()
@@ -160,7 +160,7 @@ local function showOrClearLockScreen(cause)
         on_unlock = function () unlockScreen("valid_pin") end,
         on_show_notes = showNotes,
     }
-    UIManager:show(overlay, "full", overlay:getRefreshRegion())
+    UIManager:show(overlay, "ui", overlay:getRefreshRegion())
 end
 
 return {
