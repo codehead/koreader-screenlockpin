@@ -12,6 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   a heavier refresh to avoid bad ghosting. Outside the reader UI, we accept some
   ghosting for the performance benefit of a lighter refresh (still, flashing)
   instead.
+- [#37](https://github.com/oleasteo/koreader-screenlockpin/issues/37)
+  Don't purge plugin settings on plugin disable. This is more in line with other
+  plugins.
 
 ### Added
 

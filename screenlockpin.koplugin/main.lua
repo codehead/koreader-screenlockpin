@@ -112,7 +112,7 @@ end
 function ScreenLockPinPlugin.stopPlugin()
     logger.dbg("ScreenLockPin: disable plugin")
     onBootHook.disable()
-    pluginSettings.purge()
+    pluginSettings.destruct()
     PluginShare.screen_lock_pin = nil
     PluginUpdateMgr.instance:free()
     PluginUpdateMgr.instance = nil

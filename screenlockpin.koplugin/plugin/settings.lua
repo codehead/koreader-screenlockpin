@@ -3,6 +3,13 @@ local logger = require("logger")
 local PluginUpdateMgr = require("plugin/updatemanager")
 
 --
+-- Hoisting
+--
+
+local isEnabled, hasPin, isScreensaverDelay, shouldLockOnWakeup,
+    stashOriginScreensaverDelay, restoreOriginScreensaverDelay
+
+--
 -- Init
 --
 
@@ -35,8 +42,8 @@ local function migrateSettings()
 end
 
 local function mergeDefaultSettings()
-    if G_reader_settings:hasNot("screenlockpin_enabled") then
-        G_reader_settings:saveSetting("screenlockpin_enabled", true)
+    if G_reader_settings:hasNot("screenlockpin_enabled") or not hasPin() then
+        G_reader_settings:saveSetting("screenlockpin_enabled", false)
     end
     if G_reader_settings:hasNot("screenlockpin_ui_scale") then
         G_reader_settings:saveSetting("screenlockpin_ui_scale", 40)
@@ -46,9 +53,6 @@ local function mergeDefaultSettings()
     end
     if G_reader_settings:hasNot("screenlockpin_ui_pos_y") then
         G_reader_settings:saveSetting("screenlockpin_ui_pos_y", 50)
-    end
-    if G_reader_settings:hasNot("screenlockpin_pin") then
-        G_reader_settings:saveSetting("screenlockpin_pin", "0000")
     end
     if G_reader_settings:hasNot("screenlockpin_onboot") then
         G_reader_settings:makeFalse("screenlockpin_onboot")
@@ -86,12 +90,12 @@ end
 -- Enable / Disable Plugin
 --
 
-local function isEnabled()
+function isEnabled()
     return G_reader_settings:readSetting("screenlockpin_enabled")
 end
 
 local function enable()
-    if isEnabled() then return false end
+    if isEnabled() or not hasPin() then return false end
     G_reader_settings:saveSetting("screenlockpin_enabled", true)
     if shouldLockOnWakeup() then stashOriginScreensaverDelay() end
 end
@@ -201,10 +205,15 @@ local function readPin()
     return G_reader_settings:readSetting("screenlockpin_pin")
 end
 
+function hasPin()
+    return readPin() ~= nil
+end
+
 local function setPin(next_pin)
     --logger.dbg("ScreenLockPin: updating PIN to " .. next_pin)
     logger.dbg("ScreenLockPin: updating PIN to [redacted]")
     G_reader_settings:saveSetting("screenlockpin_pin", next_pin)
+    enable()
 end
 
 --
@@ -293,28 +302,15 @@ end
 -- Cleanup
 --
 
-local function purge()
-    -- cause restore of foreign screensaver_delay setting
-    if isEnabled() then restoreOriginScreensaverDelay() end
-    -- delete all our settings
-    G_reader_settings:delSetting("screenlockpin_enabled")
-    G_reader_settings:delSetting("screenlockpin_ui_scale")
-    G_reader_settings:delSetting("screenlockpin_ui_pos_x")
-    G_reader_settings:delSetting("screenlockpin_ui_pos_y")
+local function destruct()
+    disable()
     G_reader_settings:delSetting("screenlockpin_pin")
-    G_reader_settings:delSetting("screenlockpin_onboot")
-    G_reader_settings:delSetting("screenlockpin_onwakeup")
-    G_reader_settings:delSetting("screenlockpin_ratelimit")
-    G_reader_settings:delSetting("screenlockpin_restore_screensaver_delay")
-    G_reader_settings:delSetting("screenlockpin_note_mode")
-    G_reader_settings:delSetting("screenlockpin_note_text")
-    G_reader_settings:delSetting("screenlockpin_check_updates_interval")
-    G_reader_settings:delSetting("screenlockpin_update_reminder_interval")
 end
 
 return {
     init = init,
-    purge = purge,
+    hasPin = hasPin,
+    destruct = destruct,
 
     getEnabled = isEnabled,
     setEnabled = setEnabled,

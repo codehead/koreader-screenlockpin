@@ -88,7 +88,8 @@ function LockScreenFrame:init()
         ui_root = self,
         scale = uiSettings.scale / 100,
         on_update = function(input)
-            if input ~= pluginSettings.readPin() then
+            local pin = pluginSettings.readPin()
+            if pin ~= nil and input ~= pin then
                 self.lock_widget.state:incFailedCount()
                 return
             end

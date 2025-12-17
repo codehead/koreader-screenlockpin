@@ -1,5 +1,6 @@
 local _ = require("gettext")
 local Device = require("device")
+local Notification = require("ui/widget/notification")
 
 local pluginSettings = require("plugin/settings")
 local PluginUpdateMgr = require("plugin/updatemanager")
@@ -7,6 +8,10 @@ local settingsCtrl = require("plugin/ui/ctrl/settingsctrl")
 
 local function options_enabled()
     return pluginSettings.getEnabled()
+end
+
+local function change_pin_enabled()
+    return pluginSettings.getEnabled() or not pluginSettings.hasPin()
 end
 
 local menu = {
@@ -18,6 +23,10 @@ local menu = {
             checked_func = options_enabled,
             check_callback_updates_menu = true,
             callback = function (menu_instance)
+                if not pluginSettings.hasPin() then
+                    Notification:notify(_("Set a PIN to enable"), Notification.SOURCE_DISPATCHER)
+                    return
+                end
                 pluginSettings.toggleEnabled()
                 menu_instance:updateItems()
             end,
@@ -49,7 +58,7 @@ local menu = {
         },
         {
             text = _("Change PIN"),
-            enabled_func = options_enabled,
+            enabled_func = change_pin_enabled,
             callback = settingsCtrl.showChangePinDialog,
         },
     }
