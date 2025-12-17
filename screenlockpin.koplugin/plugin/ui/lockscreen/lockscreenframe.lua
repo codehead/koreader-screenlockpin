@@ -99,14 +99,16 @@ function LockScreenFrame:init()
 
     local note_cfg = pluginSettings.getNoteSettings()
     if note_cfg.mode == "button" then
+        local icon_size = math.floor(Size.item.height_big * (1 + uiSettings.scale / 100))
+        local icon_padding = math.floor(Size.padding.large * uiSettings.scale / 100)
         self.action_row = HorizontalGroup:new {
             IconButton:new {
                 icon = "appbar.typeset",
-                width = Size.item.height_big * (1 + uiSettings.scale / 100),
-                height = Size.item.height_big * (1 + uiSettings.scale / 100),
+                width = icon_size,
+                height = icon_size,
                 callback = self.on_show_notes,
                 allow_flash = false,
-                padding = Size.padding.large * uiSettings.scale / 100,
+                padding = icon_padding,
             },
         }
     end

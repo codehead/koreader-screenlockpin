@@ -34,6 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Fill backdrop on desktop devices.
 - [#29](https://github.com/oleasteo/koreader-screenlockpin/issues/29)
   Hide lock on wakeup on devices that cannot suspend.
+- [#36](https://github.com/oleasteo/koreader-screenlockpin/issues/36)
+  Notes icon doesn't distort anymore.
 - Properly expose `PluginShare.screen_lock_pin`.
 
 ## [2025.11-1] - 2025-11-16
