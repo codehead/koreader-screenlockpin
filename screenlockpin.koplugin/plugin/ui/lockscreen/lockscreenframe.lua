@@ -6,7 +6,6 @@ local Size = require("ui/size")
 local Geom = require("ui/geometry")
 local UIManager = require("ui/uimanager")
 local FrameContainer = require("ui/widget/container/framecontainer")
-local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
@@ -65,7 +64,7 @@ function OutsideAreaInput:onTapOutside(_, ges)
     return false  -- Let event propagate to keypad
 end
 
-local LockScreenFrame = InputContainer:extend(WidgetContainer:extend {
+local LockScreenFrame = InputContainer:extend {
     name = "SLPLockScreen",
 
     lock_widget = nil,
@@ -80,7 +79,7 @@ local LockScreenFrame = InputContainer:extend(WidgetContainer:extend {
     _content_region = nil,
     outside_input = nil,
     panel = nil,
-})
+}
 
 function LockScreenFrame:init()
     local uiSettings = pluginSettings.getUiSettings()
@@ -88,7 +87,8 @@ function LockScreenFrame:init()
         ui_root = self,
         scale = uiSettings.scale / 100,
         on_update = function(input)
-            if input ~= pluginSettings.readPin() then
+            local pin = pluginSettings.readPin()
+            if pin ~= nil and input ~= pin then
                 self.lock_widget.state:incFailedCount()
                 return
             end
@@ -99,14 +99,16 @@ function LockScreenFrame:init()
 
     local note_cfg = pluginSettings.getNoteSettings()
     if note_cfg.mode == "button" then
+        local icon_size = math.floor(Size.item.height_big * (1 + uiSettings.scale / 100))
+        local icon_padding = math.floor(Size.padding.large * uiSettings.scale / 100)
         self.action_row = HorizontalGroup:new {
             IconButton:new {
                 icon = "appbar.typeset",
-                width = Size.item.height_big * (1 + uiSettings.scale / 100),
-                height = Size.item.height_big * (1 + uiSettings.scale / 100),
+                width = icon_size,
+                height = icon_size,
                 callback = self.on_show_notes,
                 allow_flash = false,
-                padding = Size.padding.large * uiSettings.scale / 100,
+                padding = icon_padding,
             },
         }
     end
@@ -114,7 +116,6 @@ function LockScreenFrame:init()
     self.outside_input = OutsideAreaInput:new {
         content_region = nil,
     }
-    self[1] = self.outside_input
     self.panel = FrameContainer:new {
         background = Blitbuffer.COLOR_WHITE,
         -- half-bright gray border plays nice with most wallpapers and mitigates
@@ -127,7 +128,8 @@ function LockScreenFrame:init()
             self.action_row,
         }
     }
-    self[2] = self.panel
+    table.insert(self, self.outside_input)
+    table.insert(self, self.panel)
 end
 
 function LockScreenFrame:setVisible(bool)
@@ -136,6 +138,9 @@ end
 
 function LockScreenFrame:paintTo(bb, x, y)
     if not self.visible then return end
+    if Device:isDesktop() then
+        bb:paintRect(x, y, Screen:getWidth(), Screen:getHeight(), Blitbuffer.COLOR_GRAY_E)
+    end
     local region = self:getContentRegion()
     self.panel:paintTo(bb, x + region.x, y + region.y)
 end

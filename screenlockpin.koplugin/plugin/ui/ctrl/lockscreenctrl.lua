@@ -2,6 +2,8 @@ local _ = require("gettext")
 local logger = require("logger")
 local Device = require("device")
 local ffiutil = require("ffi/util")
+local PluginShare = require("pluginshare")
+local ReaderUI = require("apps/reader/readerui")
 local UIManager = require("ui/uimanager")
 local Screensaver = require("ui/screensaver")
 local InfoMessage = require("ui/widget/infomessage")
@@ -11,6 +13,7 @@ local T = ffiutil.template
 local pluginSettings = require("plugin/settings")
 local screensaverUtil = require("plugin/util/screensaverutil")
 local screenshoterUtil = require("plugin/util/screenshoterutil")
+local uiManagerUtil = require("plugin/util/uimanagerutil")
 local NotesFrame = require("plugin/ui/lockscreen/notesframe")
 local LockScreenFrame = require("plugin/ui/lockscreen/lockscreenframe")
 
@@ -56,9 +59,21 @@ local function unlockScreen(cause)
     if not overlay then return false end
     logger.dbg("ScreenLockPin: close lock screen (" .. cause .. ")")
     screensaverUtil.unfreezeScreensaverAbi()
-    screensaverUtil.totalCleanup()
+    -- decide upon refresh type depending on if we unlock to reader UI
+    local hasReaderUi = uiManagerUtil.findTopMostWidget(function(widget)
+        return getmetatable(widget).__index == ReaderUI
+    end) ~= nil
+    if hasReaderUi then
+        logger.dbg("ScreenLockPin: Reader detected; full refresh")
+        screensaverUtil.totalCleanup()
+        UIManager:close(overlay)
+        UIManager:setDirty("all", "full")
+    else
+        logger.dbg("ScreenLockPin: No reader detected; partial refresh should suffice")
+        screensaverUtil.totalCleanup("flashui")
+        UIManager:close(overlay, "flashui", overlay:getRefreshRegion())
+    end
     screenshoterUtil.unfreezeScreenshoterAbi()
-    UIManager:close(overlay, "full", overlay:getRefreshRegion())
     overlay = nil
     local throttled_times = pluginSettings.readPersistentCache("throttled_times") or 0
     if throttled_times >= 2 then
@@ -69,6 +84,7 @@ local function unlockScreen(cause)
         pluginSettings.putPersistentCache("throttled_times", 0)
         pluginSettings.putPersistentCache("attempts_by_length", nil)
     end
+    UIManager:nextTick(PluginShare.plugin_updater_v1.ping)
     return true
 end
 
@@ -87,7 +103,7 @@ local function reuseShowOverlay()
     logger.dbg("ScreenLockPin: clear & show lock")
     overlay:clearInput()
     overlay:setVisible(true)
-    UIManager:setDirty(overlay, "full", overlay:getRefreshRegion())
+    UIManager:setDirty(overlay, "ui", overlay:getRefreshRegion())
 end
 
 local function onResume()
@@ -144,7 +160,7 @@ local function showOrClearLockScreen(cause)
         on_unlock = function () unlockScreen("valid_pin") end,
         on_show_notes = showNotes,
     }
-    UIManager:show(overlay, "full", overlay:getRefreshRegion())
+    UIManager:show(overlay, "ui", overlay:getRefreshRegion())
 end
 
 return {

@@ -38,7 +38,19 @@ local function closeWidgetsOfClass(Class, refreshtype)
     end
 end
 
+local function findTopMostWidget(predicate)
+    for i = #UIManager._window_stack, 0, -1 do
+        local window = UIManager._window_stack[i]
+        if window then
+            local widget = window.widget
+            if predicate(widget) then return widget end
+        end
+    end
+    return nil
+end
+
 return {
     pullModalToFront = pullModalToFront,
     closeWidgetsOfClass = closeWidgetsOfClass,
+    findTopMostWidget = findTopMostWidget,
 }

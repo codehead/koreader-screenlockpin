@@ -46,8 +46,8 @@ local function showWhileAwake()
     Device.screen_saver_lock = true
 end
 
-local function totalCleanup()
-    uiManagerUtil.closeWidgetsOfClass(ScreenSaverWidget)
+local function totalCleanup(refreshtype)
+    uiManagerUtil.closeWidgetsOfClass(ScreenSaverWidget, refreshtype)
     Screensaver:cleanup()
 end
 
