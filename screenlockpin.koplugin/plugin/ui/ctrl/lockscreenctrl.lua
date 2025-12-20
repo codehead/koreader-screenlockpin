@@ -74,6 +74,7 @@ local function unlockScreen(cause)
         UIManager:close(overlay, "flashui", overlay:getRefreshRegion())
     end
     screenshoterUtil.unfreezeScreenshoterAbi()
+    overlay:free()
     overlay = nil
     local throttled_times = pluginSettings.readPersistentCache("throttled_times") or 0
     if throttled_times >= 2 then
