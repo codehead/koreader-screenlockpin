@@ -8,6 +8,7 @@ local UIManager = require("ui/uimanager")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
+local VerticalSpan = require("ui/widget/verticalspan")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local HorizontalSpan = require("ui/widget/horizontalspan")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
@@ -129,12 +130,17 @@ function LockScreenFrame:init()
     self.bottom_row = HorizontalFlexGroup:new {
         width = self.lock_widget._width,
         padding = math.floor(Size.padding.large * (0.2 + uiSettings.scale / 100)),
+        align = #action_buttons > 0 and "bottom" or "center",
 
         action_buttons,
-        HorizontalGroup:new {
-            self.status_text,
-            -- add padding to the right for symmetry with action icon paddings
-            HorizontalSpan:new { width = icon_padding },
+        VerticalGroup:new {
+            VerticalSpan:new { width = icon_padding },
+            HorizontalGroup:new {
+                self.status_text,
+                -- add padding to the right for symmetry with action icon paddings
+                HorizontalSpan:new { width = icon_padding },
+            },
+            VerticalSpan:new { width = icon_padding },
         }
     }
 
