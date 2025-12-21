@@ -130,7 +130,9 @@ function LockScreenFrame:init()
     self.bottom_row = HorizontalFlexGroup:new {
         width = self.lock_widget._width,
         padding = math.floor(Size.padding.large * (0.2 + uiSettings.scale / 100)),
-        align = #action_buttons > 0 and "bottom" or "center",
+        -- for small panels, the center-align with action buttons looks better,
+        -- for big panels, the bottom align looks more adequate
+        align = #action_buttons > 0 and uiSettings.scale > 33 and "bottom" or "center",
 
         action_buttons,
         VerticalGroup:new {
