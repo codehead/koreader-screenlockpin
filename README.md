@@ -19,6 +19,7 @@ Just what you'd expect from a PIN lock screen…
 - 🔒 **Lock on wakeup** — secures your device after sleep
 - 🪝 **Lock on boot** — secures your device on KOReader boot
 - 🛡️ **Privacy first** — hides everything but your wallpaper from public eyes
+- 🔋 **Device Info** — glimpse the time & battery on the lock screen
 - 🚷 **Rate Limit** — forced delays after repeatedly failed attempts
 
 and more…
