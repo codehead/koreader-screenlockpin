@@ -89,5 +89,7 @@ function LockScreenStatusText:pause() UIManager:unschedule(self.interval) end
 LockScreenStatusText.resume = LockScreenStatusText.interval
 
 LockScreenStatusText.onFrontlightStateChanged = LockScreenStatusText.refreshText
+LockScreenStatusText.onCharging               = LockScreenStatusText.refreshText
+LockScreenStatusText.onNotCharging            = LockScreenStatusText.refreshText
 
 return LockScreenStatusText

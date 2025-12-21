@@ -224,8 +224,8 @@ function LockScreenFrame:relayout(refreshmode)
     UIManager:setDirty(self, refreshmode, self:getRefreshRegion())
 end
 
-function LockScreenFrame:onFrontlightStateChanged()
-    self.status_text:onFrontlightStateChanged()
-end
+function LockScreenFrame:onFrontlightStateChanged() self.status_text:onFrontlightStateChanged() end
+function LockScreenFrame:onCharging() self.status_text:onCharging() end
+function LockScreenFrame:onNotCharging() self.status_text:onNotCharging() end
 
 return LockScreenFrame
