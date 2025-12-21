@@ -1,6 +1,7 @@
 local Device = require("device")
 local datetime = require("datetime")
 local ffiUtil = require("ffi/util")
+local logger = require("logger")
 local _ = require("gettext")
 local BD = require("ui/bidi")
 local Font = require("ui/font")
@@ -57,13 +58,23 @@ local LockScreenStatusText = TextWidget:extend {
 }
 
 function LockScreenStatusText:init()
-    self:resume()
+    self:resume(true)
     self.face = Font:getFace(self.font, self.font_size)
 end
 
 function LockScreenStatusText:free()
     self:pause()
     TextWidget.free(self)
+end
+
+function LockScreenStatusText:setText(text)
+    if text == self.text then return end
+    self.text = text
+    -- override: don't just call `self:free` as we don't want background
+    -- interval to stop
+    TextWidget.free(self)
+    if not silent then logger.dbg("ScreenLockPin: status text changed") end
+    self.on_change()
 end
 
 function LockScreenStatusText:refreshText()
@@ -74,19 +85,23 @@ function LockScreenStatusText:refreshText()
     if frontlight then table.insert(arr, frontlight) end
     if battery then table.insert(arr, battery) end
     if time then table.insert(arr, time) end
-    local prev_text = self.text
     self:setText(table.concat(arr, "   "))
-    if self.text ~= prev_text then self.on_change() end
 end
 
-function LockScreenStatusText:interval()
+function LockScreenStatusText:_interval(silent)
+    if not silent then logger.dbg("ScreenLockPin: status text interval refresh") end
     self:refreshText()
     -- schedule next auto refresh at full minute
-    UIManager:scheduleIn(60 - (os.time() % 60), self.interval, self)
+    local delay_seconds = 60 - (os.time() % 60)
+    logger.dbg("ScreenLockPin: schedule status text interval in ".. delay_seconds .. " seconds")
+    UIManager:scheduleIn(delay_seconds, self._interval, self)
 end
 
-function LockScreenStatusText:pause() UIManager:unschedule(self.interval) end
-LockScreenStatusText.resume = LockScreenStatusText.interval
+function LockScreenStatusText:pause()
+    logger.dbg("ScreenLockPin: unschedule status text interval")
+    UIManager:unschedule(self._interval)
+end
+LockScreenStatusText.resume = LockScreenStatusText._interval
 
 LockScreenStatusText.onFrontlightStateChanged = LockScreenStatusText.refreshText
 LockScreenStatusText.onCharging               = LockScreenStatusText.refreshText
