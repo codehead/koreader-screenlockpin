@@ -8,7 +8,7 @@
 [KOReader](https://github.com/koreader/koreader) content from unauthorized
 access.
 
-![Lock Screen Preview](https://media.githubusercontent.com/media/oleasteo/koreader-screenlockpin/main/screenshots/preview.png)
+[![Lock Screen Showcase](https://media.githubusercontent.com/media/oleasteo/koreader-screenlockpin/main/assets/showcase.webp)](https://media.githubusercontent.com/media/oleasteo/koreader-screenlockpin/main/assets/showcase.1024p.webp)
 
 ---
 
