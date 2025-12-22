@@ -74,6 +74,7 @@ local function unlockScreen(cause)
         UIManager:close(overlay, "flashui", overlay:getRefreshRegion())
     end
     screenshoterUtil.unfreezeScreenshoterAbi()
+    overlay:free()
     overlay = nil
     local throttled_times = pluginSettings.readPersistentCache("throttled_times") or 0
     if throttled_times >= 2 then
@@ -103,7 +104,7 @@ local function reuseShowOverlay()
     logger.dbg("ScreenLockPin: clear & show lock")
     overlay:clearInput()
     overlay:setVisible(true)
-    UIManager:setDirty(overlay, "ui", overlay:getRefreshRegion())
+    UIManager:setDirty(overlay, "flashui", overlay:getRefreshRegion())
 end
 
 local function onResume()
@@ -160,7 +161,7 @@ local function showOrClearLockScreen(cause)
         on_unlock = function () unlockScreen("valid_pin") end,
         on_show_notes = showNotes,
     }
-    UIManager:show(overlay, "ui", overlay:getRefreshRegion())
+    UIManager:show(overlay, "flashui", overlay:getRefreshRegion())
 end
 
 return {

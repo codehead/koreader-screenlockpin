@@ -7,14 +7,19 @@ local Geom = require("ui/geometry")
 local UIManager = require("ui/uimanager")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local InputContainer = require("ui/widget/container/inputcontainer")
+local WidgetContainer = require("ui/widget/container/widgetcontainer")
+local VerticalSpan = require("ui/widget/verticalspan")
 local VerticalGroup = require("ui/widget/verticalgroup")
+local HorizontalSpan = require("ui/widget/horizontalspan")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
 local IconButton = require("ui/widget/iconbutton")
 local GestureRange = require("ui/gesturerange")
 local Screen = Device.screen
 
 local pluginSettings = require("plugin/settings")
+local HorizontalFlexGroup = require("plugin/ui/horizontalflexgroup")
 local ScreenLockWidget = require("plugin/ui/lockscreen/screenlockwidget")
+local LockScreenStatusText = require("plugin/ui/lockscreen/statustext")
 
 -- Transparent input widget for handling taps outside the panel
 local OutsideAreaInput = InputContainer:extend {
@@ -68,7 +73,8 @@ local LockScreenFrame = InputContainer:extend {
     name = "SLPLockScreen",
 
     lock_widget = nil,
-    action_row = nil,
+    status_text = nil,
+    bottom_row = nil,
     on_unlock = nil,
     on_show_notes = nil,
     visible = true,
@@ -96,22 +102,49 @@ function LockScreenFrame:init()
             self.on_unlock()
         end
     }
+    self.status_text = LockScreenStatusText:new {
+        font_size = 13 + math.floor(uiSettings.scale / 100 * 7.1),
+        on_change = function ()
+            if not self.bottom_row then return end
+            self.bottom_row[2]:resetLayout()
+            self.bottom_row:resetLayout()
+            UIManager:setDirty(self, "fast", self:getRefreshRegion())
+        end,
+    }
 
     local note_cfg = pluginSettings.getNoteSettings()
+    local action_buttons = WidgetContainer:new {}
+    local icon_padding = math.floor(Size.padding.large * (0.2 + uiSettings.scale / 100))
     if note_cfg.mode == "button" then
-        local icon_size = math.floor(Size.item.height_big * (1 + uiSettings.scale / 100))
-        local icon_padding = math.floor(Size.padding.large * uiSettings.scale / 100)
-        self.action_row = HorizontalGroup:new {
-            IconButton:new {
-                icon = "appbar.typeset",
-                width = icon_size,
-                height = icon_size,
-                callback = self.on_show_notes,
-                allow_flash = false,
-                padding = icon_padding,
-            },
-        }
+        local icon_size = math.floor(Size.item.height_big * (0.75 + uiSettings.scale / 100))
+        table.insert(action_buttons, IconButton:new {
+            icon = "appbar.typeset",
+            width = icon_size,
+            height = icon_size,
+            callback = self.on_show_notes,
+            allow_flash = false,
+            padding = icon_padding,
+        })
     end
+
+    self.bottom_row = HorizontalFlexGroup:new {
+        width = self.lock_widget._width,
+        padding = math.floor(Size.padding.large * (0.2 + uiSettings.scale / 100)),
+        -- for small panels, the center-align with action buttons looks better,
+        -- for big panels, the bottom align looks more adequate
+        align = #action_buttons > 0 and uiSettings.scale > 33 and "bottom" or "center",
+
+        action_buttons,
+        VerticalGroup:new {
+            VerticalSpan:new { width = icon_padding },
+            HorizontalGroup:new {
+                self.status_text,
+                -- add padding to the right for symmetry with action icon paddings
+                HorizontalSpan:new { width = icon_padding },
+            },
+            VerticalSpan:new { width = icon_padding },
+        }
+    }
 
     self.outside_input = OutsideAreaInput:new {
         content_region = nil,
@@ -122,18 +155,21 @@ function LockScreenFrame:init()
         -- ghosting a little
         color = Blitbuffer.COLOR_GRAY_7,
         padding = 0,
-        -- Content: PIN widget + bottom action row
-        VerticalGroup:new {
-            self.lock_widget,
-            self.action_row,
-        }
+
+        VerticalGroup:new { self.lock_widget, self.bottom_row }
     }
     table.insert(self, self.outside_input)
     table.insert(self, self.panel)
 end
 
 function LockScreenFrame:setVisible(bool)
+    if self.visible == bool then return end
     self.visible = bool
+    if bool then
+        self.status_text:resume()
+    else
+        self.status_text:pause()
+    end
 end
 
 function LockScreenFrame:paintTo(bb, x, y)
@@ -189,10 +225,15 @@ function LockScreenFrame:relayout(refreshmode)
     logger.dbg("ScreenLockPin: resize overlay to " .. screen_dimen.x .. "x" .. screen_dimen.y)
     self.panel.dimen = screen_dimen
     self.lock_widget:onScreenResize(screen_dimen)
+    self.bottom_row:setWidth(self.lock_widget._width)
     self.outside_input.screen_mid = screen_dimen.h / 2
     self._refresh_region = nil
     self._content_region = nil
     UIManager:setDirty(self, refreshmode, self:getRefreshRegion())
 end
+
+function LockScreenFrame:onFrontlightStateChanged() self.status_text:onFrontlightStateChanged() end
+function LockScreenFrame:onCharging() self.status_text:onCharging() end
+function LockScreenFrame:onNotCharging() self.status_text:onNotCharging() end
 
 return LockScreenFrame

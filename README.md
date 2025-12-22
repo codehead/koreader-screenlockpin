@@ -1,14 +1,14 @@
 # ScreenLockPin — Protect your KOReader with a PIN
 
 [![MIT License](https://img.shields.io/badge/License-MIT-orange.svg)](https://opensource.org/licenses/MIT)
-[![Release Version](https://img.shields.io/badge/Release-2025.12-blue.svg)](https://github.com/oleasteo/koreader-screenlockpin/releases/tag/v2025.12)
+[![Release Version](https://img.shields.io/badge/Release-2025.12--1-blue.svg)](https://github.com/oleasteo/koreader-screenlockpin/releases/tag/v2025.12)
 [![Compatibility](https://img.shields.io/badge/Comptibility-KOReader%20v2025.10-yellow.svg)](https://github.com/koreader/koreader/tree/v2025.10)
 
 **ScreenLockPin**: A fast, sophisticated PIN Lock Screen that protects your
 [KOReader](https://github.com/koreader/koreader) content from unauthorized
 access.
 
-![Lock Screen Preview](https://media.githubusercontent.com/media/oleasteo/koreader-screenlockpin/main/screenshots/preview.png)
+[![Lock Screen Showcase](https://media.githubusercontent.com/media/oleasteo/koreader-screenlockpin/main/assets/showcase.webp)](https://media.githubusercontent.com/media/oleasteo/koreader-screenlockpin/main/assets/showcase.1024p.webp)
 
 ---
 
@@ -19,6 +19,7 @@ Just what you'd expect from a PIN lock screen…
 - 🔒 **Lock on wakeup** — secures your device after sleep
 - 🪝 **Lock on boot** — secures your device on KOReader boot
 - 🛡️ **Privacy first** — hides everything but your wallpaper from public eyes
+- 🔋 **Device Info** — glimpse the time & battery on the lock screen
 - 🚷 **Rate Limit** — forced delays after repeatedly failed attempts
 
 and more…
