@@ -105,8 +105,8 @@ Designed for **KOReader v2025.08** and newer. Please report any compatibility
 issues you encounter.
 
 Tested devices:
-- ✅ Kindle (10th generation)
-- ✅ Kindle Oasis (10th generation)
+- ✅ Kindle (10th, 12th gen)
+- ✅ Kindle Oasis (10th gen)
 - ✅ Kobo Aura (N514)
 - ✅ Kobo Clara BW (N365)
 
