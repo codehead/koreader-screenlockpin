@@ -3,7 +3,13 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-[//]: # (## [Unreleased])
+## [Unreleased]
+
+### Fixed
+
+- [#31](https://github.com/oleasteo/koreader-screenlockpin/issues/31)
+  Initial bottom config tab change now properly hides prior tab for smaller next
+  tab.
 
 ## [2025.12-1] - 2025-12-22
 
