@@ -3,7 +3,14 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+[//]: # (## [Unreleased])
+
+## [2025.12-1] - 2025-12-22
+
+This small update adds some status information (time, battery, frontlight) to
+the bottom of the panel. It also includes a render fix after device deep sleep.
+
+Merry Christmas 🎄 and a happy new year! 🚀
 
 ### Added
 
