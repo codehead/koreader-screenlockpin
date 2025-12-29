@@ -6,7 +6,7 @@ local Notification = require("ui/widget/notification")
 local EventListener = require("ui/widget/eventlistener")
 
 local ScreenLockPinPublicApi = require("plugin/publicapi")
-local pluginMenu = require("plugin/menu")
+local pluginMenus = require("plugin/menu")
 local pluginSettings = require("plugin/settings")
 local PluginUpdateMgr = require("plugin/updatemanager")
 local onBootHook = require("plugin/util/onboothook")
@@ -57,8 +57,8 @@ function ScreenLockPinPlugin:init()
     })
     self.ui.menu:registerToMainMenu({
         addToMainMenu = function(_, menu_items)
-            logger.dbg("ScreenLockPin: adding menu")
-            menu_items.screen_lockpin_reset = pluginMenu
+            logger.dbg("ScreenLockPin: adding menu items")
+            for key, menu in pairs(pluginMenus) do menu_items[key] = menu end
         end
     })
 
