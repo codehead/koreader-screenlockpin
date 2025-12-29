@@ -106,6 +106,9 @@ local function insert_order_item(category, pos_item, rel, ...)
     end
 end
 
+insert_order_item(reader_order.screen, "screensaver", 0, "screenlockpin_config")
+insert_order_item(fm_order.screen, "screensaver", 0, "screenlockpin_config")
+
 insert_order_item(reader_order.exit_menu, "sleep", -1, "screenlockpin_action")
 insert_order_item(fm_order.exit_menu, "sleep", -1, "screenlockpin_action")
 

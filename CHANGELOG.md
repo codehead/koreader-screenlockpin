@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The menu entry is moved close to the "Sleep screen" entry for better grouping.
+
 ### Added
 
 - [#35](https://github.com/oleasteo/koreader-screenlockpin/issues/35)
